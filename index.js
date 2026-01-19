@@ -1,161 +1,71 @@
-import * as THREE from "three";
-import { VRButton } from "three/addons/webxr/VRButton.js";
-
-import { World } from "./js/world.js";
-import { loadEnabledModules } from "./js/modules_registry.js";
-import { AndroidControls } from "./core/android_controls.js";
-
-const hud = document.getElementById("hud");
-const hudlog = document.getElementById("hudlog");
-const statline = document.getElementById("statline");
-
-const avatarUrlInput = document.getElementById("avatarUrl");
-const scaleSlider = document.getElementById("scaleSlider");
-const yawSlider = document.getElementById("yawSlider");
-const ySlider = document.getElementById("ySlider");
-const scaleVal = document.getElementById("scaleVal");
-const yawVal = document.getElementById("yawVal");
-const yVal = document.getElementById("yVal");
-
-function log(msg){
-  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  hudlog.textContent = (hudlog.textContent + "\n" + line).slice(-9000);
-  hudlog.scrollTop = hudlog.scrollHeight;
-  console.log(line);
-}
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js';
+import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.158/examples/jsm/webxr/VRButton.js';
+import { createMasterAvatar } from './avatar_core.js';
+import { updateWalk } from './avatar_logic.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+scene.background = new THREE.Color(0x202020);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 300);
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0,1.6,3);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
 renderer.xr.enabled = true;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
 
-document.getElementById("app").appendChild(renderer.domElement);
+const hemi = new THREE.HemisphereLight(0xffffff,0x444444,0.6);
+scene.add(hemi);
 
-async function setupVRButton(){
-  if (!("xr" in navigator) || !navigator.xr){
-    log("WebXR: NOT AVAILABLE in this browser (Android Chrome often shows this). Non‑VR mode will still work.");
-    return;
-  }
-  try{
-    const ok = await navigator.xr.isSessionSupported("immersive-vr");
-    if (!ok){
-      log("WebXR: immersive-vr NOT supported here. Use Quest Browser on headset, or ensure HTTPS + WebXR enabled.");
-      return;
-    }
-    document.body.appendChild(VRButton.createButton(renderer));
-    log("WebXR: immersive-vr supported. VRButton ready.");
-  }catch(err){
-    log(`WebXR: check failed (${err?.message || err}). Running non‑VR mode.`);
-  }
-}
+const dir = new THREE.DirectionalLight(0xffffff,0.8);
+dir.position.set(5,10,5);
+dir.castShadow = true;
+scene.add(dir);
 
-await setupVRButton();
+// FLOOR
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(30,30),
+  new THREE.MeshStandardMaterial({color:0x333333})
+);
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
 
-const player = new THREE.Group();
-player.add(camera);
-scene.add(player);
+// TABLE
+const table = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.8,0.8,0.15,32),
+  new THREE.MeshStandardMaterial({color:0x0b6623})
+);
+table.position.y = 0.75;
+table.castShadow = true;
+scene.add(table);
 
-player.position.set(0, 0, 6);
-camera.position.set(0, 1.65, 0);
+// DISPLAY AVATARS
+const male = createMasterAvatar('male');
+male.position.set(-2,0,-2);
+scene.add(male);
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+const female = createMasterAvatar('female');
+female.position.set(-3.2,0,-2);
+scene.add(female);
+
+// WALKING NPC
+const walker = createMasterAvatar('male');
+scene.add(walker);
+
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(()=>{
+  const t = clock.getElapsedTime();
+  updateWalk(male,t,false);
+  updateWalk(female,t,false);
+
+  walker.position.x = Math.sin(t*0.5)*4;
+  walker.position.z = Math.cos(t*0.5)*4;
+  walker.rotation.y = t*0.5 + Math.PI/2;
+  updateWalk(walker,t,true);
+
+  renderer.render(scene,camera);
 });
-
-const controls = new AndroidControls({ player, camera, dom: renderer.domElement, log });
-const world = await World.init({ THREE, scene, renderer, camera, player, controls, log });
-
-let modules = [];
-async function reloadModules(){
-  modules = await loadEnabledModules({ THREE, scene, renderer, camera, player, world, controls, log });
-  log(`Modules loaded: ${modules.length}`);
-}
-await reloadModules();
-
-// ---- UI wiring ----
-document.getElementById("btnHideHud").onclick = () => { hud.style.display = "none"; };
-document.getElementById("btnReloadModules").onclick = async () => { log("Reloading modules…"); await reloadModules(); };
-
-document.getElementById("btnLoadAvatar").onclick = async () => {
-  const url = avatarUrlInput.value.trim();
-  await world.avatar.load(url || "./assets/avatar.glb", { resetPose: true }).catch(err => log(`AVATAR ERROR: ${err?.message || err}`));
-  // sync sliders to current
-  const t = world.avatar.getTuning();
-  scaleSlider.value = t.scale.toFixed(2);
-  yawSlider.value = String(Math.round(THREE.MathUtils.radToDeg(t.yaw)));
-  ySlider.value = t.y.toFixed(2);
-  updateLabels();
-};
-
-document.getElementById("btnToggleSkeleton").onclick = () => {
-  const on = world.avatar.toggleSkeleton();
-  log(`Skeleton: ${on ? "ON" : "OFF"}`);
-};
-
-document.getElementById("btnResetAvatar").onclick = () => {
-  world.avatar.resetTuning();
-  const t = world.avatar.getTuning();
-  scaleSlider.value = t.scale.toFixed(2);
-  yawSlider.value = String(Math.round(THREE.MathUtils.radToDeg(t.yaw)));
-  ySlider.value = t.y.toFixed(2);
-  updateLabels();
-  log("Avatar tuning reset.");
-};
-
-function updateLabels(){
-  scaleVal.textContent = Number(scaleSlider.value).toFixed(2);
-  yawVal.textContent = `${Math.round(Number(yawSlider.value))}°`;
-  yVal.textContent = Number(ySlider.value).toFixed(2);
-}
-updateLabels();
-
-scaleSlider.addEventListener("input", () => {
-  updateLabels();
-  world.avatar.setScale(Number(scaleSlider.value));
-});
-
-yawSlider.addEventListener("input", () => {
-  updateLabels();
-  world.avatar.setYawDeg(Number(yawSlider.value));
-});
-
-ySlider.addEventListener("input", () => {
-  updateLabels();
-  world.avatar.setY(Number(ySlider.value));
-});
-
-renderer.xr.addEventListener("sessionstart", () => {
-  log("XR session started — hiding HUD, flipping player 180°.");
-  player.rotation.y = Math.PI;
-  hud.style.display = "none";
-});
-
-let lastT = performance.now();
-let fpsAcc = 0, fpsCount = 0;
-
-renderer.setAnimationLoop((t) => {
-  const dt = Math.min((t - lastT) / 1000, 0.05);
-  lastT = t;
-
-  controls.update(dt, t/1000);
-  world.update(dt, t/1000);
-  for (const m of modules) m?.update?.(dt, t/1000);
-
-  renderer.render(scene, camera);
-
-  fpsAcc += dt; fpsCount++;
-  if (fpsAcc >= 0.5){
-    const fps = Math.round(fpsCount / fpsAcc);
-    fpsAcc = 0; fpsCount = 0;
-    const p = player.position;
-    statline.textContent = `FPS ${fps} | pos ${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)} | XR ${renderer.xr.isPresenting ? "ON" : "OFF"}`;
-  }
-});
-
-log("Boot complete. Tip: do NOT run from file:// — use GitHub Pages or any HTTP server.");
