@@ -34,7 +34,26 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
 
 document.getElementById("app").appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+
+async function setupVRButton(){
+  if (!("xr" in navigator) || !navigator.xr){
+    log("WebXR: NOT AVAILABLE in this browser (Android Chrome often shows this). Non‑VR mode will still work.");
+    return;
+  }
+  try{
+    const ok = await navigator.xr.isSessionSupported("immersive-vr");
+    if (!ok){
+      log("WebXR: immersive-vr NOT supported here. Use Quest Browser on headset, or ensure HTTPS + WebXR enabled.");
+      return;
+    }
+    document.body.appendChild(VRButton.createButton(renderer));
+    log("WebXR: immersive-vr supported. VRButton ready.");
+  }catch(err){
+    log(`WebXR: check failed (${err?.message || err}). Running non‑VR mode.`);
+  }
+}
+
+await setupVRButton();
 
 const player = new THREE.Group();
 player.add(camera);
@@ -65,7 +84,7 @@ document.getElementById("btnReloadModules").onclick = async () => { log("Reloadi
 
 document.getElementById("btnLoadAvatar").onclick = async () => {
   const url = avatarUrlInput.value.trim();
-  await world.avatar.load(url || "./assets/avatar.glb", { resetPose: true });
+  await world.avatar.load(url || "./assets/avatar.glb", { resetPose: true }).catch(err => log(`AVATAR ERROR: ${err?.message || err}`));
   // sync sliders to current
   const t = world.avatar.getTuning();
   scaleSlider.value = t.scale.toFixed(2);
