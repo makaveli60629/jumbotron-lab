@@ -3,56 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Jumbotron Quest Lab</title>
-  <style>
-    html,body{margin:0;height:100%;background:#050507;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,Arial;}
-    #hud{
-      position:fixed;left:10px;top:10px;z-index:10;color:#cfd3ff;
-      background:rgba(0,0,0,.62);backdrop-filter: blur(6px);
-      border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px;max-width:min(520px,92vw);
-    }
-    #hud h1{font-size:14px;margin:0 0 8px 0;color:#fff}
-    #row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    button,select{
-      background:#121224;color:#fff;border:1px solid rgba(255,255,255,.18);
-      border-radius:10px;padding:10px 12px;font-size:14px;
-    }
-    button{cursor:pointer}
-    #log{margin-top:8px;font-size:12px;opacity:.9;max-height:140px;overflow:auto;white-space:pre-wrap}
-    #hint{margin-top:8px;font-size:12px;opacity:.85;line-height:1.35}
-    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);font-size:12px;opacity:.9}
-  </style>
-
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
+  <title>SCARLETT • World Orchestrator • Test Server</title>
+  <link rel="stylesheet" href="css/hud.css" />
 </head>
+
 <body>
-  <div id="hud">
-    <h1>Jumbotron Quest Lab</h1>
-    <div id="row">
-      <span class="pill" id="status">Status: booting…</span>
-      <button id="toggleHud">Hide HUD</button>
+  <!-- Minimal HUD (hidden by default; in-world buttons are primary on Quest) -->
+  <div id="hud" style="display:none;">
+    <div id="hudRow">
+      <button id="btnEnterVR" class="hudBtn">Enter VR</button>
+      <button id="btnToggleJumbo" class="hudBtn">Jumbotron: ON</button>
+      <button id="btnDiag" class="hudBtn">Diag</button>
+      <button id="btnHideHUD" class="hudBtn">Hide</button>
     </div>
-    <div style="height:8px"></div>
-    <div id="row">
-      <select id="preset"></select>
-      <button id="load">Load</button>
-      <button id="open">Open</button>
-    </div>
-    <div id="hint">
-      <b>Quest:</b> point laser at the jumbotron screen + pull trigger to open.<br/>
-      <b>Android:</b> tap <b>Open</b> to open in a new tab (audio works).<br/>
-      <span style="opacity:.8">YouTube doesn’t reliably play inside a 3D screen in WebXR; this is a reliable portal.</span>
-    </div>
-    <div id="log"></div>
+    <pre id="diagPanel" class="hidden"></pre>
   </div>
 
-  <script type="module" src="./js/app.js"></script>
+  <div id="app"></div>
+
+  <script type="module">
+    import { boot } from "./js/orchestrator.js";
+    boot();
+  </script>
 </body>
 </html>
