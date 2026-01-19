@@ -1,17 +1,15 @@
 import * as THREE from "three";
 
-// Procedural textures: no external image files required (Quest-safe)
 export const TexturePacket = {
   getShowroomFelt() {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 1024;
     const ctx = canvas.getContext("2d");
 
-    // base felt
     ctx.fillStyle = "#0a1220";
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // subtle noise speckle
+    // subtle speckle noise for felt
     const img = ctx.getImageData(0,0,1024,1024);
     for (let i=0;i<img.data.length;i+=4){
       const n = (Math.random()*18)|0;
@@ -22,7 +20,6 @@ export const TexturePacket = {
     }
     ctx.putImageData(img,0,0);
 
-    // gold ring + spokes
     ctx.strokeStyle = "#d2b46a";
     ctx.lineWidth = 12;
     ctx.beginPath();
@@ -42,8 +39,6 @@ export const TexturePacket = {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = 16;
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1,1);
     tex.needsUpdate = true;
     return tex;
   },

@@ -1,74 +1,86 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { Reflector } from "three/addons/objects/Reflector.js";
 import { TexturePacket } from "./textures.js";
 
 export const World = {
   async init({ THREE, scene, renderer, camera, player, controls, log }) {
-    const s = {
-      THREE, scene, renderer, camera, player, controls, log,
-      root: new THREE.Group(),
-      avatar: null,
-      clock: new THREE.Clock(),
-    };
+    const s = { THREE, scene, renderer, camera, player, controls, log, root: new THREE.Group() };
     scene.add(s.root);
 
-    // Lighting (stable + good for avatars)
-    const amb = new THREE.AmbientLight(0xffffff, 0.55);
-    s.root.add(amb);
+    // Lighting (avatar-friendly)
+    s.root.add(new THREE.AmbientLight(0xffffff, 0.55));
 
-    const key = new THREE.DirectionalLight(0xffffff, 0.9);
+    const key = new THREE.DirectionalLight(0xffffff, 0.95);
     key.position.set(3, 6, 3);
-    key.castShadow = false;
     s.root.add(key);
 
     const rim = new THREE.DirectionalLight(0x66ffff, 0.35);
     rim.position.set(-4, 3, -3);
     s.root.add(rim);
 
-    // Floor grid for scale reference
+    // Scale grid
     const grid = new THREE.GridHelper(40, 40, 0x003333, 0x001a1a);
-    grid.position.y = 0;
     s.root.add(grid);
 
-    // Showroom table + preview station
-    buildShowroom(s);
+    // Room shell (simple walls)
+    buildRoomShell(s);
 
-    // Scorpion table (off to the side, so you can verify texture module)
+    // Tables
+    buildShowroom(s);
     buildScorpion(s);
 
-    // Avatar API
+    // Mirror wall (Reflector)
+    buildMirror(s);
+
+    // Avatar preview system
     s.avatar = createAvatarApi(s);
 
-    // Load default avatar (if present). If missing, we keep running without crashing.
-    setTimeout(() => s.avatar.load("./assets/avatar.glb").catch(()=>{}), 50);
+    // Try load default avatar if present (optional)
+    setTimeout(() => s.avatar.load("./assets/avatar.glb").catch(()=>{}), 60);
 
-    log?.("World init OK. Drop /assets/avatar.glb or paste a URL in the HUD and press LOAD AVATAR.");
-
+    log?.("World init OK. Use the Avatar Lab sliders + mirror to tune body scale/rotation.");
     return {
       avatar: s.avatar,
       update: (dt, t) => {
-        // simple idle animation pulse on preview ring
-        if (s._previewRing){
-          s._previewRing.rotation.y += dt * 0.25;
-        }
+        if (s._previewRing) s._previewRing.rotation.y += dt * 0.25;
+        s.avatar._update?.(dt, t);
       }
     };
   }
 };
 
+function buildRoomShell(s){
+  const mat = new s.THREE.MeshStandardMaterial({ color: 0x05080f, roughness: 0.95, metalness: 0.0 });
+  const floor = new s.THREE.Mesh(new s.THREE.PlaneGeometry(60,60), mat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = 0;
+  s.root.add(floor);
+
+  const wallMat = new s.THREE.MeshStandardMaterial({ color: 0x070c18, roughness: 0.9, metalness: 0.05 });
+  const back = new s.THREE.Mesh(new s.THREE.PlaneGeometry(60,12), wallMat);
+  back.position.set(0, 6, -18);
+  s.root.add(back);
+
+  const left = new s.THREE.Mesh(new s.THREE.PlaneGeometry(36,12), wallMat);
+  left.position.set(-18, 6, 0);
+  left.rotation.y = Math.PI/2;
+  s.root.add(left);
+
+  const right = new s.THREE.Mesh(new s.THREE.PlaneGeometry(36,12), wallMat);
+  right.position.set(18, 6, 0);
+  right.rotation.y = -Math.PI/2;
+  s.root.add(right);
+}
+
 function buildShowroom(s){
-  // Big table (felt texture)
   const feltTex = TexturePacket.getShowroomFelt();
   const mat = new s.THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.9, metalness: 0.02 });
 
-  const table = new s.THREE.Mesh(
-    new s.THREE.CylinderGeometry(3.2, 3.3, 0.38, 72),
-    mat
-  );
+  const table = new s.THREE.Mesh(new s.THREE.CylinderGeometry(3.2, 3.3, 0.38, 72), mat);
   table.position.set(0, 0.95, 0);
   s.root.add(table);
 
-  // Table base
   const base = new s.THREE.Mesh(
     new s.THREE.CylinderGeometry(1.2, 1.4, 0.9, 48),
     new s.THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8, metalness: 0.1 })
@@ -76,7 +88,7 @@ function buildShowroom(s){
   base.position.set(0, 0.45, 0);
   s.root.add(base);
 
-  // Avatar preview pedestal in front of player
+  // Avatar preview pedestal (in front of player)
   const pedestal = new s.THREE.Mesh(
     new s.THREE.CylinderGeometry(0.55, 0.65, 0.2, 32),
     new s.THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.7, metalness: 0.2 })
@@ -93,81 +105,162 @@ function buildShowroom(s){
   s.root.add(ring);
   s._previewRing = ring;
 
-  // Label
-  const label = makeBillboardText(s, "AVATAR PREVIEW", 0x00ffff);
-  label.position.set(0, 1.15, 2.6);
-  s.root.add(label);
+  // Position marker at feet (helps judge height)
+  const feet = new s.THREE.Mesh(
+    new s.THREE.CircleGeometry(0.28, 32),
+    new s.THREE.MeshStandardMaterial({ color: 0x00ffff, transparent: true, opacity: 0.25 })
+  );
+  feet.rotation.x = -Math.PI/2;
+  feet.position.set(0, 0.01, 2.6);
+  s.root.add(feet);
 }
 
 function buildScorpion(s){
   const scTex = TexturePacket.getScorpionFelt();
   const mat = new s.THREE.MeshStandardMaterial({ map: scTex, roughness: 0.85, metalness: 0.04 });
-  const table = new s.THREE.Mesh(
-    new s.THREE.CylinderGeometry(1.9, 2.0, 0.34, 48),
-    mat
-  );
+  const table = new s.THREE.Mesh(new s.THREE.CylinderGeometry(1.9, 2.0, 0.34, 48), mat);
   table.position.set(8, 0.95, -2);
   s.root.add(table);
+}
 
-  const label = makeBillboardText(s, "SCORPION TABLE", 0x00ffff);
-  label.position.set(8, 1.15, -2);
-  s.root.add(label);
+function buildMirror(s){
+  // Mirror wall positioned behind the avatar preview so you can see front + back easily.
+  const geom = new s.THREE.PlaneGeometry(6.5, 4.2);
+  const mirror = new Reflector(geom, {
+    clipBias: 0.003,
+    textureWidth: Math.floor(window.innerWidth * (window.devicePixelRatio || 1)),
+    textureHeight: Math.floor(window.innerHeight * (window.devicePixelRatio || 1)),
+    color: 0x202020
+  });
+  mirror.position.set(0, 2.2, 5.4);
+  mirror.rotation.y = Math.PI; // face toward avatar/player
+  s.root.add(mirror);
+
+  // Frame
+  const frame = new s.THREE.Mesh(
+    new s.THREE.BoxGeometry(6.7, 4.4, 0.08),
+    new s.THREE.MeshStandardMaterial({ color: 0x0a0f18, roughness: 0.8, metalness: 0.2 })
+  );
+  frame.position.copy(mirror.position);
+  frame.rotation.copy(mirror.rotation);
+  frame.position.z += 0.02;
+  s.root.add(frame);
 }
 
 function createAvatarApi(s){
   const loader = new GLTFLoader();
 
+  const tuning = {
+    scale: 1.0,
+    yaw: Math.PI,
+    y: 0.22,
+    z: 2.6,
+    x: 0.0
+  };
+
+  let avatarRoot = null;
+  let skeletonHelper = null;
+
   async function load(url, opts = {}){
     const resolved = url || "./assets/avatar.glb";
     s.log?.(`Avatar load: ${resolved}`);
 
-    // Remove old avatar
-    if (s._avatarRoot){
-      s.root.remove(s._avatarRoot);
-      s._avatarRoot.traverse?.((o)=>{ if (o.geometry) o.geometry.dispose?.(); if (o.material) disposeMaterial(o.material); });
-      s._avatarRoot = null;
+    // cleanup old
+    if (avatarRoot){
+      s.root.remove(avatarRoot);
+      avatarRoot.traverse?.((o)=>{
+        if (o.geometry) o.geometry.dispose?.();
+        if (o.material) disposeMaterial(o.material);
+      });
+      avatarRoot = null;
+    }
+    if (skeletonHelper){
+      s.root.remove(skeletonHelper);
+      skeletonHelper = null;
     }
 
-    // Load GLB/GLTF
-    const gltf = await new Promise((resolve, reject) => {
-      loader.load(resolved, resolve, undefined, reject);
-    });
+    const gltf = await new Promise((resolve, reject) => loader.load(resolved, resolve, undefined, reject));
+    avatarRoot = gltf.scene || gltf.scenes?.[0];
+    if (!avatarRoot) throw new Error("GLTF has no scene.");
 
-    const root = gltf.scene || gltf.scenes?.[0];
-    if (!root) throw new Error("GLTF has no scene.");
-
-    // Put avatar on pedestal (preview station)
-    root.position.set(0, 0.22, 2.6);
-    root.rotation.y = Math.PI; // face player/camera
-    root.scale.setScalar(1.0);
-
-    // Normalize scale (optional): try to make avatar ~1.7m tall if bounding box is present
-    root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(root);
+    // normalize scale to ~1.7m (then multiply tuning.scale)
+    avatarRoot.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(avatarRoot);
     const size = new THREE.Vector3();
     box.getSize(size);
+
+    let auto = 1.0;
     if (size.y > 0.1){
-      const targetH = 1.70;
-      const scale = targetH / size.y;
-      root.scale.multiplyScalar(scale);
-      root.position.set(0, 0.22, 2.6);
-      s.log?.(`Avatar auto-scale: h=${size.y.toFixed(2)}m -> ${targetH.toFixed(2)}m (x${scale.toFixed(2)})`);
-    }else{
-      s.log?.("Avatar scale: skipped (bbox too small).");
+      auto = 1.70 / size.y;
+      s.log?.(`Avatar auto-scale: ${size.y.toFixed(2)}m -> 1.70m (x${auto.toFixed(2)})`);
     }
 
-    s.root.add(root);
-    s._avatarRoot = root;
+    avatarRoot.position.set(tuning.x, tuning.y, tuning.z);
+    avatarRoot.rotation.y = tuning.yaw;
+    avatarRoot.scale.setScalar(auto * tuning.scale);
 
-    // If resetPose requested, you can expand later with animation mixer reset
-    if (opts.resetPose) {
-      // placeholder hook
-    }
-
+    s.root.add(avatarRoot);
     s.log?.("Avatar OK (preview station).");
   }
 
-  return { load };
+  function setScale(v){
+    tuning.scale = clamp(v, 0.01, 10);
+    applyTuning();
+  }
+  function setYawDeg(deg){
+    tuning.yaw = THREE.MathUtils.degToRad(deg % 360);
+    applyTuning();
+  }
+  function setY(v){
+    tuning.y = v;
+    applyTuning();
+  }
+  function resetTuning(){
+    tuning.scale = 1.0;
+    tuning.yaw = Math.PI;
+    tuning.y = 0.22;
+    applyTuning();
+  }
+  function getTuning(){ return { ...tuning }; }
+
+  function applyTuning(){
+    if (!avatarRoot) return;
+    avatarRoot.position.set(tuning.x, tuning.y, tuning.z);
+    avatarRoot.rotation.y = tuning.yaw;
+
+    // keep existing base scale but multiply by tuning.scale
+    avatarRoot.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(avatarRoot);
+    const size = new THREE.Vector3(); box.getSize(size);
+    // If we can't infer, just apply scalar
+    const current = avatarRoot.scale.x || 1;
+    const base = current / (tuning._lastAppliedScale || 1);
+    avatarRoot.scale.setScalar(base * tuning.scale);
+    tuning._lastAppliedScale = tuning.scale;
+
+    if (skeletonHelper){
+      skeletonHelper.update();
+    }
+  }
+
+  function toggleSkeleton(){
+    if (!avatarRoot) return false;
+    if (skeletonHelper){
+      s.root.remove(skeletonHelper);
+      skeletonHelper = null;
+      return false;
+    }
+    skeletonHelper = new THREE.SkeletonHelper(avatarRoot);
+    skeletonHelper.visible = true;
+    s.root.add(skeletonHelper);
+    return true;
+  }
+
+  function _update(){
+    if (skeletonHelper) skeletonHelper.update();
+  }
+
+  return { load, setScale, setYawDeg, setY, resetTuning, toggleSkeleton, getTuning, _update };
 }
 
 function disposeMaterial(mat){
@@ -180,23 +273,4 @@ function disposeMaterial(mat){
   mat.dispose?.();
 }
 
-function makeBillboardText(s, text, colorHex){
-  // very lightweight canvas text sprite
-  const canvas = document.createElement("canvas");
-  canvas.width = 512; canvas.height = 128;
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0,0,512,128);
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.fillRect(0,0,512,128);
-  ctx.fillStyle = "#00ffff";
-  ctx.font = "bold 38px monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, 256, 64);
-
-  const tex = new s.THREE.CanvasTexture(canvas);
-  const mat = new s.THREE.SpriteMaterial({ map: tex, transparent: true });
-  const spr = new s.THREE.Sprite(mat);
-  spr.scale.set(2.4, 0.6, 1);
-  return spr;
-}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }

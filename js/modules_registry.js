@@ -1,10 +1,9 @@
 // Module registry: add/remove modules here without touching engine.
 // Any module must export: init(ctx) -> { update(dt,t)?, dispose()? }
-// Toggle modules by setting enabled true/false.
 
 export const MODULES = [
-  // Example starter module (disabled by default):
-  // { name: "example", enabled: false, path: "./js/modules/example_module.js" }
+  // Example:
+  // { name: "dealer_bot", enabled: false, path: "./js/modules/dealer_bot.js" }
 ];
 
 export async function loadEnabledModules(ctx){
