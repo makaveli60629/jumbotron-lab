@@ -1,0 +1,1 @@
+Drop your avatar file here as avatar.glb (recommended). Example: ReadyPlayerMe export.
