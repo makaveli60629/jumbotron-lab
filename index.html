@@ -2,18 +2,67 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Update 4.4 – Avatar Display & Walker</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Update 4.4.1 – Avatar Anatomy + Android Debug</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
 <style>
-body { margin:0; overflow:hidden; background:#111; }
-#hint {
- position:absolute; bottom:10px; left:10px;
- color:#fff; font-family:Arial; font-size:12px; opacity:0.7;
-}
+  body { margin:0; overflow:hidden; background:#0b0b0b; font-family: Arial, sans-serif; }
+  #hud {
+    position: fixed; left: 10px; top: 10px; z-index: 10;
+    color: #fff; font-size: 12px; line-height: 1.35;
+    background: rgba(0,0,0,0.45); padding: 10px 12px; border-radius: 10px;
+    max-width: 78vw;
+  }
+  #hud b { font-size: 13px; }
+  #vrRow { margin-top: 6px; }
+  #vrMsg { opacity: 0.85; }
+  #touchUI {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+  }
+  .stick {
+    position: absolute; width: 140px; height: 140px; border-radius: 999px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    pointer-events: auto; touch-action: none;
+  }
+  #stickL { left: 16px; bottom: 20px; }
+  #stickR { right: 16px; bottom: 20px; }
+  .nub {
+    position:absolute; left:50%; top:50%;
+    width: 56px; height: 56px; margin-left:-28px; margin-top:-28px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22);
+  }
+  #btnBar {
+    position: fixed; right: 14px; top: 14px; z-index: 11;
+    display: flex; gap: 8px;
+  }
+  .btn {
+    pointer-events: auto;
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+    color:#fff; padding: 8px 10px; border-radius: 10px; font-size: 12px;
+  }
 </style>
 </head>
 <body>
-<div id="hint">Update 4.4 – Male/Female Display + Walking NPC</div>
+<div id="hud">
+  <b>Update 4.4.1</b> — Male/Female Display + Walking NPC + Android Debug<br/>
+  <span id="status"></span>
+  <div id="vrRow"><span id="vrMsg"></span></div>
+  <div style="margin-top:6px; opacity:0.85">
+    Android: Left stick = move, Right stick = look. Tap screen to lock pointer (desktop).
+  </div>
+</div>
+
+<div id="btnBar">
+  <button class="btn" id="toggleHUD">HUD</button>
+  <button class="btn" id="reset">Reset</button>
+</div>
+
+<div id="touchUI">
+  <div class="stick" id="stickL"><div class="nub" id="nubL"></div></div>
+  <div class="stick" id="stickR"><div class="nub" id="nubR"></div></div>
+</div>
+
 <script type="module" src="./index.js"></script>
 </body>
 </html>
