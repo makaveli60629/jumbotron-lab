@@ -1,43 +1,51 @@
+// FILE: index.js | LOCATION: Root | PURPOSE: XR Engine & Animation Loop
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
-import { createWorld, updateWorld } from './world.js';
+import { World } from './world.js';
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let scene, camera, renderer, world;
+let lastTime = 0;
 
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true;
-document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+init();
 
-// Hand Tracking Setup
-const handModels = new XRHandModelFactory();
-const hand1 = renderer.xr.getHand(0);
-hand1.add(handModels.createHandModel(hand1, "mesh"));
-scene.add(hand1);
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+    
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.xr.enabled = true;
+    
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(VRButton.createButton(renderer));
 
-const hand2 = renderer.xr.getHand(1);
-hand2.add(handModels.createHandModel(hand2, "mesh"));
-scene.add(hand2);
+    // Initialize the Logic Controller
+    world = new World(scene, camera, renderer);
 
-createWorld(scene);
+    // Diagnostic Toggle for Android
+    window.toggleDiagnostics = () => {
+        const panel = document.getElementById('diag-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    };
 
-// Android Diagnostics Logic
-let lastTime = performance.now();
-let frames = 0;
-window.fps = 0;
+    renderer.setAnimationLoop(render);
+}
 
-renderer.setAnimationLoop(() => {
-    frames++;
-    const now = performance.now();
-    if (now >= lastTime + 1000) {
-        window.fps = frames;
-        frames = 0;
-        lastTime = now;
+function render(time) {
+    const delta = time - lastTime;
+    lastTime = time;
+
+    // Update World Modules
+    world.update(time);
+
+    // Update Diagnostics
+    if (delta > 0) {
+        const fps = Math.round(1000 / delta);
+        document.getElementById('fps-val').innerText = fps;
     }
 
-    updateWorld(hand1, hand2);
     renderer.render(scene, camera);
-});
+}
