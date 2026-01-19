@@ -1,51 +1,25 @@
-// FILE: index.js | LOCATION: Root | PURPOSE: XR Engine & Animation Loop
-import * as THREE from 'three';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { World } from './world.js';
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+import { VRButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/VRButton.js";
+import { World } from "./js/world.js";
 
-let scene, camera, renderer, world;
-let lastTime = 0;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
 
-init();
+const player = new THREE.Group();
+player.add(camera);
+scene.add(player);
+camera.position.set(0,1.6,2);
 
-function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050505);
-    
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.xr.enabled = true;
-    
-    document.body.appendChild(renderer.domElement);
-    document.body.appendChild(VRButton.createButton(renderer));
+const world = new World(scene, camera, renderer);
 
-    // Initialize the Logic Controller
-    world = new World(scene, camera, renderer);
-
-    // Diagnostic Toggle for Android
-    window.toggleDiagnostics = () => {
-        const panel = document.getElementById('diag-panel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-    };
-
-    renderer.setAnimationLoop(render);
-}
-
-function render(time) {
-    const delta = time - lastTime;
-    lastTime = time;
-
-    // Update World Modules
-    world.update(time);
-
-    // Update Diagnostics
-    if (delta > 0) {
-        const fps = Math.round(1000 / delta);
-        document.getElementById('fps-val').innerText = fps;
-    }
-
-    renderer.render(scene, camera);
-}
+let last = performance.now();
+renderer.setAnimationLoop(t=>{
+ const dt=(t-last)/1000; last=t;
+ world.update(dt,t);
+ renderer.render(scene,camera);
+});
