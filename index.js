@@ -10,7 +10,7 @@ const vrMsgEl = document.getElementById('vrMsg');
 
 // Scene
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x151515);
+scene.background = new THREE.Color(0x121212);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 250);
 camera.position.set(0, 1.65, 6);
@@ -20,14 +20,14 @@ const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.xr.enabled = true;
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // XR support message + VRButton
 let xrSupported = false;
 async function initXR(){
-  try {
-    xrSupported = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr'));
-  } catch { xrSupported = false; }
+  try { xrSupported = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr')); }
+  catch { xrSupported = false; }
   vrMsgEl.textContent = xrSupported
     ? 'WebXR: immersive-vr supported. (Quest: press Enter VR)'
     : 'WebXR NOT available here. (Android Chrome often) — use Meta/Oculus Browser for VR. Debug controls still work.';
@@ -35,26 +35,37 @@ async function initXR(){
 }
 initXR();
 
-// Lights
-scene.add(new THREE.HemisphereLight(0xffffff, 0x333333, 0.7));
-const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-dir.position.set(8, 12, 6);
-dir.castShadow = true;
-dir.shadow.mapSize.set(2048,2048);
-scene.add(dir);
+// Lighting (slightly polished, still simple)
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.85));
 
-// Floor (big room)
+const key = new THREE.DirectionalLight(0xffffff, 0.95);
+key.position.set(6, 10, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far  = 40;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xffffff, 0.25);
+fill.position.set(-6, 6, -4);
+scene.add(fill);
+
+const rim = new THREE.PointLight(0xffffff, 0.25, 20);
+rim.position.set(0, 3, -6);
+scene.add(rim);
+
+// Floor (bigger room so you don't spawn into a wall)
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(60, 60),
-  new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 1 })
+  new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 1 })
 );
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-// Table (polished enough for dev)
+// Table (dev reference)
 const tableTop = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.95, 0.95, 0.14, 48),
+  new THREE.CylinderGeometry(0.95, 0.95, 0.14, 64),
   new THREE.MeshStandardMaterial({ color: 0x0b6b2b, roughness: 0.9 })
 );
 tableTop.position.set(0, 0.78, 0);
@@ -62,14 +73,14 @@ tableTop.castShadow = true;
 scene.add(tableTop);
 
 const tableBase = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.25, 0.35, 0.75, 24),
+  new THREE.CylinderGeometry(0.25, 0.35, 0.75, 32),
   new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1.0 })
 );
 tableBase.position.set(0, 0.375, 0);
 tableBase.castShadow = true;
 scene.add(tableBase);
 
-// Avatars: male + female display (left), one walking bot (right)
+// Avatars: male + female display, and one walking bot (uses spine diagnostics)
 const male = createPerfectAvatar('male');
 male.position.set(-2.6, 0, -1.6);
 scene.add(male);
@@ -82,7 +93,7 @@ const walker = createPerfectAvatar('male');
 walker.position.set(3, 0, -2);
 scene.add(walker);
 
-// Spine diagnostics line for walker (most useful to inspect motion)
+// Spine diagnostics line for walker (PRESERVED)
 let spineOn = true;
 const spine = createSpineDiagnostic(scene, walker);
 spine.line.visible = spineOn;
@@ -113,7 +124,7 @@ document.getElementById('toggleIK').onclick = () => { ikOn = !ikOn; };
 const controllers = [renderer.xr.getController(0), renderer.xr.getController(1)];
 controllers.forEach(c => scene.add(c));
 
-// Diagnostics
+// Diagnostics HUD
 let fps=0, frames=0, lastFpsT=performance.now();
 function hudUpdate(){
   const p = camera.position;
@@ -149,14 +160,14 @@ renderer.setAnimationLoop(() => {
   updateAvatarIdle(male, t);
   updateAvatarIdle(female, t);
 
-  // Walker: path + walk
+  // Walker: patrol + walk
   const R = 4.2;
   walker.position.x = Math.sin(t * 0.45) * R;
   walker.position.z = Math.cos(t * 0.45) * R;
   walker.rotation.y = t * 0.45 + Math.PI/2;
   updateAvatarWalk(walker, t);
 
-  // Spine diagnostic line updates
+  // Spine diagnostic line updates (PRESERVED)
   if (spineOn) spine.update();
 
   // Hands mirroring to controllers (VR only)

@@ -1,4 +1,3 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js';
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 
 /** Idle breathing + micro twist */
@@ -7,11 +6,10 @@ export function updateAvatarIdle(avatar, t){
   const breath = Math.sin(t*2.0) * 0.012;
   if (j.chest)   j.chest.scale.set(1+breath, 1+breath, 1+breath);
   if (j.stomach) j.stomach.scale.set(1+breath*0.6, 1+breath*0.6, 1+breath*0.6);
-  if (j.head)    j.head.position.y = 1.70 + breath*0.2;
   if (j.pelvis)  j.pelvis.rotation.y = Math.sin(t*1.1)*0.03;
 }
 
-/** Procedural walk that visibly bends knees/elbows */
+/** Walk that visibly bends knees/elbows */
 export function updateAvatarWalk(avatar, t){
   const j = avatar.userData.joints || {};
   updateAvatarIdle(avatar, t);
@@ -41,9 +39,8 @@ export function updateAvatarWalk(avatar, t){
 }
 
 /**
- * Lightweight controller mirroring (not full IK):
- * If XR controllers exist, attach hand groups to controller grip pose.
- * This is a stable placeholder so you SEE hands moving in VR immediately.
+ * Simple controller mirroring (VR only):
+ * Moves hand end-groups to controller pose (debug-stable).
  */
 export function mirrorHandsToControllers(renderer, avatar, controllers, enabled=true){
   if (!enabled) return;
@@ -53,7 +50,6 @@ export function mirrorHandsToControllers(renderer, avatar, controllers, enabled=
   const handR = j.handR;
   if (!handL || !handR) return;
 
-  // Use controller 0 as left, 1 as right (common setup)
   if (controllers[0]) {
     controllers[0].getWorldPosition(handL.position);
     controllers[0].getWorldQuaternion(handL.quaternion);
