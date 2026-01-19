@@ -2,60 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Update 4.4.1 – Avatar Anatomy + Android Debug</title>
+<title>Update 4.6.1 – Diagnostic Spine + Android Controls + WebXR</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
 <style>
-  body { margin:0; overflow:hidden; background:#0b0b0b; font-family: Arial, sans-serif; }
-  #hud {
-    position: fixed; left: 10px; top: 10px; z-index: 10;
-    color: #fff; font-size: 12px; line-height: 1.35;
-    background: rgba(0,0,0,0.45); padding: 10px 12px; border-radius: 10px;
-    max-width: 78vw;
+  body{margin:0;overflow:hidden;background:#0b0b0b;font-family:Arial,Helvetica,sans-serif}
+  #hud{
+    position:fixed;left:10px;top:10px;z-index:10;color:#fff;font-size:12px;line-height:1.35;
+    background:rgba(0,0,0,.45);padding:10px 12px;border-radius:12px;max-width:80vw
   }
-  #hud b { font-size: 13px; }
-  #vrRow { margin-top: 6px; }
-  #vrMsg { opacity: 0.85; }
-  #touchUI {
-    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+  #hud b{font-size:13px}
+  #btnBar{position:fixed;right:12px;top:12px;z-index:11;display:flex;gap:8px;flex-wrap:wrap;max-width:70vw;justify-content:flex-end}
+  .btn{
+    pointer-events:auto;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
+    color:#fff;padding:8px 10px;border-radius:10px;font-size:12px
   }
-  .stick {
-    position: absolute; width: 140px; height: 140px; border-radius: 999px;
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
-    pointer-events: auto; touch-action: none;
+  #touchUI{position:fixed;inset:0;pointer-events:none;z-index:9}
+  .stick{
+    position:absolute;width:140px;height:140px;border-radius:999px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14);pointer-events:auto;touch-action:none
   }
-  #stickL { left: 16px; bottom: 20px; }
-  #stickR { right: 16px; bottom: 20px; }
-  .nub {
-    position:absolute; left:50%; top:50%;
-    width: 56px; height: 56px; margin-left:-28px; margin-top:-28px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22);
-  }
-  #btnBar {
-    position: fixed; right: 14px; top: 14px; z-index: 11;
-    display: flex; gap: 8px;
-  }
-  .btn {
-    pointer-events: auto;
-    background: rgba(255,255,255,0.10);
-    border: 1px solid rgba(255,255,255,0.18);
-    color:#fff; padding: 8px 10px; border-radius: 10px; font-size: 12px;
+  #stickL{left:16px;bottom:20px}
+  #stickR{right:16px;bottom:20px}
+  .nub{
+    position:absolute;left:50%;top:50%;width:56px;height:56px;margin-left:-28px;margin-top:-28px;border-radius:999px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22)
   }
 </style>
 </head>
 <body>
 <div id="hud">
-  <b>Update 4.4.1</b> — Male/Female Display + Walking NPC + Android Debug<br/>
-  <span id="status"></span>
-  <div id="vrRow"><span id="vrMsg"></span></div>
-  <div style="margin-top:6px; opacity:0.85">
-    Android: Left stick = move, Right stick = look. Tap screen to lock pointer (desktop).
+  <b>Update 4.6.1</b> — Complete Humanoid + Spine Diagnostics + Android Debug<br/>
+  <div id="status"></div>
+  <div id="vrMsg" style="opacity:.85"></div>
+  <div style="opacity:.85;margin-top:6px">
+    Android: Left stick = move, Right stick = look. Quest: use Meta/Oculus Browser for VR.
   </div>
 </div>
 
 <div id="btnBar">
   <button class="btn" id="toggleHUD">HUD</button>
   <button class="btn" id="reset">Reset</button>
+  <button class="btn" id="toggleSpine">Spine</button>
+  <button class="btn" id="toggleIK">IK</button>
 </div>
 
 <div id="touchUI">
