@@ -1,7 +1,6 @@
 import * as THREE from "three";
 
 export function buildRoom(scene){
-  // Floor (lighter so you can see)
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(12, 12),
     new THREE.MeshStandardMaterial({ color: 0x1a1a28, roughness: 0.95, metalness: 0.0 })
@@ -32,16 +31,16 @@ export function buildRoom(scene){
   right.position.set(6, 2, 0);
   scene.add(right);
 
-  // Soft “stage” circle
+  // stage pad
   const pad = new THREE.Mesh(
-    new THREE.CircleGeometry(0.8, 48),
+    new THREE.CircleGeometry(0.85, 48),
     new THREE.MeshStandardMaterial({ color: 0x2a2a44, roughness: 0.7, metalness: 0.05 })
   );
   pad.rotation.x = -Math.PI/2;
   pad.position.set(0, 0.01, 2.6);
   scene.add(pad);
 
-  // A faint marker column so you always know where “forward” is
+  // forward marker
   const marker = new THREE.Mesh(
     new THREE.CylinderGeometry(0.05, 0.05, 1.2, 18),
     new THREE.MeshStandardMaterial({ color: 0x6b74ff, roughness: 0.2, metalness: 0.1, emissive: 0x101030 })

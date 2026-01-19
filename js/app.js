@@ -5,25 +5,22 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildRoom } from "./room.js";
 import { Jumbotron } from "./jumbotron.js";
 import { wireUI } from "./ui.js";
-import { installLaserSelect } from "./xr_laser.js";
+import { createLaserSystem } from "./xr_laser.js";
 
 /**
- * PLAYLIST_ITEMS
- * - Replace these URLs with YOUR playlist items anytime.
- * - You can use: channel links, playlist links, live links, or search URLs.
+ * Replace these with YOUR playlist/channel links any time.
+ * You can use: channel links, playlist links, live links, or search URLs.
  */
-const PLAYLIST_ITEMS = [
+const ITEMS = [
   { label: "ABC News Live", url: "https://www.youtube.com/@ABCNews/live" },
   { label: "CBS News Live", url: "https://www.youtube.com/@CBSNews/live" },
   { label: "Chicago News (Live Search)", url: "https://www.youtube.com/results?search_query=chicago+news+live" },
-  { label: "NFL / Football (Live Search)", url: "https://www.youtube.com/results?search_query=nfl+live" },
+  { label: "Football / NFL (Live Search)", url: "https://www.youtube.com/results?search_query=nfl+live" },
   { label: "Weather Live", url: "https://www.youtube.com/results?search_query=weather+live+radar" },
   { label: "Music Live", url: "https://www.youtube.com/results?search_query=live+music" }
 ];
 
-const state = {
-  idx: 0
-};
+const state = { idx: 0 };
 
 function log(msg){
   console.log(msg);
@@ -38,26 +35,26 @@ function setStatus(txt){
   if(el) el.textContent = "Status: " + txt;
 }
 
-function clampIndex(i){
-  const n = PLAYLIST_ITEMS.length;
-  return (i % n + n) % n;
+function openCurrent(){
+  const it = ITEMS[state.idx];
+  if(it?.url) window.open(it.url, "_blank", "noopener,noreferrer");
 }
 
-function applyIndex(jumbo, i){
-  state.idx = clampIndex(i);
-  const item = PLAYLIST_ITEMS[state.idx];
-  jumbo.setSource({ url: item.url, label: item.label });
-  // sync UI select if present
+function setIndex(jumbo, i){
+  const n = ITEMS.length;
+  state.idx = (i % n + n) % n;
+  const it = ITEMS[state.idx];
+  jumbo.setSource({ url: it.url, label: it.label });
+  log(`[item] ${state.idx+1}/${n}: ${it.label}`);
   const sel = document.getElementById("preset");
   if(sel) sel.value = String(state.idx);
-  log(`[item] ${state.idx+1}/${PLAYLIST_ITEMS.length}: ${item.label}`);
 }
 
 async function main(){
   setStatus("starting…");
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a0f); // slightly brighter than black
+  scene.background = new THREE.Color(0x0a0a10);
 
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.05, 200);
   camera.position.set(0, 1.6, 3.2);
@@ -69,12 +66,12 @@ async function main(){
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  // Brighter lighting so you can SEE the room and screen
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x303050, 1.2));
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  // Brighter lighting (so you can SEE)
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x303050, 1.25));
+  const key = new THREE.DirectionalLight(0xffffff, 1.15);
   key.position.set(4, 7, 3);
   scene.add(key);
-  const fill = new THREE.PointLight(0xb0b8ff, 0.8, 20);
+  const fill = new THREE.PointLight(0xb0b8ff, 0.85, 20);
   fill.position.set(0, 2.2, 1.5);
   scene.add(fill);
 
@@ -87,45 +84,33 @@ async function main(){
     height: 1.7
   });
 
-  // Desktop dev controls (harmless on VR)
+  // Desktop dev camera controls (fine to keep)
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 1.5, 0);
   controls.update();
 
   // UI
   wireUI({
-    items: PLAYLIST_ITEMS,
-    onPrev: () => applyIndex(jumbo, state.idx - 1),
-    onNext: () => applyIndex(jumbo, state.idx + 1),
-    onPick: (indexStr) => applyIndex(jumbo, parseInt(indexStr, 10) || 0),
-    onOpen: () => {
-      const item = PLAYLIST_ITEMS[state.idx];
-      window.open(item.url, "_blank", "noopener,noreferrer");
-    },
+    items: ITEMS,
+    onLoad: (idxStr) => setIndex(jumbo, parseInt(idxStr, 10) || 0),
+    onOpen: () => openCurrent(),
     onToggleHud: () => {
       const hud = document.getElementById("hud");
       hud.style.display = hud.style.display === "none" ? "block" : "none";
     }
   });
 
-  // Default item
-  applyIndex(jumbo, 0);
+  setIndex(jumbo, 0);
 
-  // Double tap/click fallback (mobile + desktop)
-  window.addEventListener("dblclick", () => {
-    const item = PLAYLIST_ITEMS[state.idx];
-    if(item?.url) window.open(item.url, "_blank", "noopener,noreferrer");
+  // Quest laser system
+  const laser = createLaserSystem({
+    scene, renderer,
+    targetMesh: jumbo.screen,
+    onSelect: () => openCurrent()
   });
-  window.addEventListener("touchend", (e) => {
-    if(e.target && e.target.closest && e.target.closest("#hud")) return;
-    // do nothing; "Open" button is primary on mobile
-  }, { passive:true });
 
-  // XR laser select: point at screen + trigger
-  installLaserSelect({ scene, camera, renderer, targetMesh: jumbo.screen, onSelect: () => {
-    const item = PLAYLIST_ITEMS[state.idx];
-    if(item?.url) window.open(item.url, "_blank", "noopener,noreferrer");
-  }});
+  // Optional: double click open on desktop
+  window.addEventListener("dblclick", () => openCurrent());
 
   window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth/window.innerHeight;
@@ -136,6 +121,7 @@ async function main(){
   renderer.setAnimationLoop(() => {
     controls.update();
     jumbo.update();
+    laser.update(); // keep reticle accurate
     renderer.render(scene, camera);
   });
 

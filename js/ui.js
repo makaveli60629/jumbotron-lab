@@ -1,11 +1,9 @@
-export function wireUI({ items, onPrev, onNext, onPick, onOpen, onToggleHud }){
+export function wireUI({ items, onLoad, onOpen, onToggleHud }){
   const sel = document.getElementById("preset");
-  const prev = document.getElementById("prev");
-  const next = document.getElementById("next");
+  const load = document.getElementById("load");
   const open = document.getElementById("open");
-  const toggleHud = document.getElementById("toggleHud");
+  const toggle = document.getElementById("toggleHud");
 
-  // populate select
   sel.innerHTML = "";
   items.forEach((it, i) => {
     const opt = document.createElement("option");
@@ -14,9 +12,7 @@ export function wireUI({ items, onPrev, onNext, onPick, onOpen, onToggleHud }){
     sel.appendChild(opt);
   });
 
-  prev.onclick = () => onPrev?.();
-  next.onclick = () => onNext?.();
-  sel.onchange = () => onPick?.(sel.value);
+  load.onclick = () => onLoad?.(sel.value);
   open.onclick = () => onOpen?.();
-  toggleHud.onclick = () => onToggleHud?.();
+  toggle.onclick = () => onToggleHud?.();
 }
