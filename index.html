@@ -3,33 +3,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>ScarlettVR Test Server Spine</title>
+  <title>ScarlettVR Test Server — Avatar Lab</title>
   <style>
     html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:monospace;touch-action:none}
     #app{position:fixed;inset:0}
     #hud{
       position:fixed;top:12px;left:12px;z-index:9999;
-      width:330px;max-width:calc(100vw - 24px);
-      background:rgba(10,16,32,.86);border:1px solid #00ffff;
+      width:360px;max-width:calc(100vw - 24px);
+      background:rgba(10,16,32,.88);border:1px solid #00ffff;
       color:#00ffff;padding:12px;border-radius:12px;
-      box-shadow:0 10px 30px rgba(0,0,0,.5);
+      box-shadow:0 10px 30px rgba(0,0,0,.55);
     }
-    #hud h2{margin:0 0 8px 0;font-size:14px}
-    #hud small{color:#9ff;opacity:.9}
+    #hud h2{margin:0 0 6px 0;font-size:14px}
+    #hud small{color:#9ff;opacity:.9;display:block;line-height:1.25}
     #hud .row{display:flex;gap:8px;margin-top:8px}
-    #hud input{flex:1;background:#000;border:1px solid #225;color:#0f0;padding:8px;border-radius:8px;font-family:monospace}
+    #hud input[type="text"]{
+      flex:1;background:#000;border:1px solid #225;color:#0f0;
+      padding:8px;border-radius:8px;font-family:monospace
+    }
+    #hud label{display:block;margin-top:8px;font-size:11px;color:#9ff}
+    #hud input[type="range"]{width:100%}
     #hud button{
       width:100%;margin-top:8px;padding:10px;
       background:#00ffff;color:#000;border:none;border-radius:10px;
-      font-weight:800;cursor:pointer;
+      font-weight:900;cursor:pointer;
     }
     #hud button.secondary{background:#102030;color:#00ffff;border:1px solid #00ffff}
+    #hud button.danger{background:#ff3b3b;color:#000}
     #hudlog{
       height:120px;overflow:auto;background:#000;margin-top:8px;
       border:1px solid #234;border-radius:8px;padding:6px;
       color:#00ff00;font-size:10px;white-space:pre-wrap;
     }
-    /* Android controls overlay */
     #touchLayer{position:fixed;inset:0;z-index:50;pointer-events:none}
     .joy{
       position:absolute;bottom:18px;left:18px;width:140px;height:140px;
@@ -52,7 +57,6 @@
     }
   </style>
 
-  <!-- Use importmap so 'three' + addons resolve consistently on all browsers -->
   <script type="importmap">
   {
     "imports": {
@@ -66,29 +70,36 @@
   <div id="app"></div>
 
   <div id="hud">
-    <h2>SCARLETT TEST SERVER — PERMANENT SPINE</h2>
+    <h2>SCARLETT AVATAR LAB — PERMANENT SPINE</h2>
     <small>
-      Desktop: WASD + Mouse (click/drag) • Android: Left Joystick + Right Drag Look • Quest: Enter VR
+      Desktop: WASD + Mouse (drag) • Android: Left Joystick + Right Drag Look • Quest: Enter VR (HUD auto-hides)
     </small>
 
-    <div class="row">
-      <div style="flex:1">
-        <div id="statline">BOOTING…</div>
-      </div>
-    </div>
+    <div id="statline" style="margin-top:8px;">BOOTING…</div>
 
     <div class="row">
-      <input id="avatarUrl" placeholder="Optional GLB/GLTF URL (https://...)" />
+      <input id="avatarUrl" type="text" placeholder="Optional GLB/GLTF URL (https://...)" />
     </div>
-
     <button id="btnLoadAvatar">LOAD AVATAR (URL or /assets/avatar.glb)</button>
+
+    <label>Avatar Scale: <span id="scaleVal">1.00</span></label>
+    <input id="scaleSlider" type="range" min="0.50" max="2.50" step="0.01" value="1.00" />
+
+    <label>Avatar Yaw (Rotate): <span id="yawVal">180°</span></label>
+    <input id="yawSlider" type="range" min="0" max="360" step="1" value="180" />
+
+    <label>Avatar Height Offset (Y): <span id="yVal">0.22</span></label>
+    <input id="ySlider" type="range" min="-0.50" max="1.50" step="0.01" value="0.22" />
+
+    <button id="btnToggleSkeleton" class="secondary">TOGGLE SKELETON VIEW</button>
+    <button id="btnResetAvatar" class="secondary">RESET AVATAR TUNING</button>
+
     <button id="btnReloadModules" class="secondary">RELOAD MODULES</button>
     <button id="btnHideHud">PLAY (HIDE HUD)</button>
 
     <div id="hudlog">INITIALIZING…</div>
   </div>
 
-  <!-- Touch controls layer (visual only; events handled in core/android_controls.js) -->
   <div id="touchLayer">
     <div class="joy" id="joyBase"><div class="knob" id="joyKnob"></div></div>
     <div class="lookHint" id="lookHint">Look: drag right side</div>

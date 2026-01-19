@@ -5,20 +5,25 @@ import { World } from "./js/world.js";
 import { loadEnabledModules } from "./js/modules_registry.js";
 import { AndroidControls } from "./core/android_controls.js";
 
-// ---------- Diagnostics helpers ----------
 const hud = document.getElementById("hud");
 const hudlog = document.getElementById("hudlog");
 const statline = document.getElementById("statline");
+
 const avatarUrlInput = document.getElementById("avatarUrl");
+const scaleSlider = document.getElementById("scaleSlider");
+const yawSlider = document.getElementById("yawSlider");
+const ySlider = document.getElementById("ySlider");
+const scaleVal = document.getElementById("scaleVal");
+const yawVal = document.getElementById("yawVal");
+const yVal = document.getElementById("yVal");
 
 function log(msg){
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  hudlog.textContent = (hudlog.textContent + "\n" + line).slice(-8000);
+  hudlog.textContent = (hudlog.textContent + "\n" + line).slice(-9000);
   hudlog.scrollTop = hudlog.scrollHeight;
   console.log(line);
 }
 
-// ---------- Core Three setup ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
@@ -31,78 +36,107 @@ renderer.xr.enabled = true;
 document.getElementById("app").appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
-// Player rig (move this, not the camera directly)
 const player = new THREE.Group();
 player.add(camera);
 scene.add(player);
 
-// Spawn facing forward; world can adjust
 player.position.set(0, 0, 6);
 camera.position.set(0, 1.65, 0);
 
-// Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---------- Controls ----------
 const controls = new AndroidControls({ player, camera, dom: renderer.domElement, log });
-
-// ---------- World ----------
 const world = await World.init({ THREE, scene, renderer, camera, player, controls, log });
 
-// ---------- Modules ----------
 let modules = [];
 async function reloadModules(){
-  try{
-    modules = await loadEnabledModules({ THREE, scene, renderer, camera, player, world, controls, log });
-    log(`Modules loaded: ${modules.length}`);
-  }catch(err){
-    log(`MODULE LOAD ERROR: ${err?.message || err}`);
-  }
+  modules = await loadEnabledModules({ THREE, scene, renderer, camera, player, world, controls, log });
+  log(`Modules loaded: ${modules.length}`);
 }
 await reloadModules();
 
-// ---------- UI buttons ----------
+// ---- UI wiring ----
 document.getElementById("btnHideHud").onclick = () => { hud.style.display = "none"; };
 document.getElementById("btnReloadModules").onclick = async () => { log("Reloading modules…"); await reloadModules(); };
+
 document.getElementById("btnLoadAvatar").onclick = async () => {
   const url = avatarUrlInput.value.trim();
   await world.avatar.load(url || "./assets/avatar.glb", { resetPose: true });
+  // sync sliders to current
+  const t = world.avatar.getTuning();
+  scaleSlider.value = t.scale.toFixed(2);
+  yawSlider.value = String(Math.round(THREE.MathUtils.radToDeg(t.yaw)));
+  ySlider.value = t.y.toFixed(2);
+  updateLabels();
 };
 
-// Auto-hide HUD on VR entry (fixes “dark hud” / “dark hug”)
+document.getElementById("btnToggleSkeleton").onclick = () => {
+  const on = world.avatar.toggleSkeleton();
+  log(`Skeleton: ${on ? "ON" : "OFF"}`);
+};
+
+document.getElementById("btnResetAvatar").onclick = () => {
+  world.avatar.resetTuning();
+  const t = world.avatar.getTuning();
+  scaleSlider.value = t.scale.toFixed(2);
+  yawSlider.value = String(Math.round(THREE.MathUtils.radToDeg(t.yaw)));
+  ySlider.value = t.y.toFixed(2);
+  updateLabels();
+  log("Avatar tuning reset.");
+};
+
+function updateLabels(){
+  scaleVal.textContent = Number(scaleSlider.value).toFixed(2);
+  yawVal.textContent = `${Math.round(Number(yawSlider.value))}°`;
+  yVal.textContent = Number(ySlider.value).toFixed(2);
+}
+updateLabels();
+
+scaleSlider.addEventListener("input", () => {
+  updateLabels();
+  world.avatar.setScale(Number(scaleSlider.value));
+});
+
+yawSlider.addEventListener("input", () => {
+  updateLabels();
+  world.avatar.setYawDeg(Number(yawSlider.value));
+});
+
+ySlider.addEventListener("input", () => {
+  updateLabels();
+  world.avatar.setY(Number(ySlider.value));
+});
+
 renderer.xr.addEventListener("sessionstart", () => {
   log("XR session started — hiding HUD, flipping player 180°.");
-  player.rotation.y = Math.PI;   // face table/preview by default
+  player.rotation.y = Math.PI;
   hud.style.display = "none";
 });
 
-// ---------- Main Loop ----------
 let lastT = performance.now();
-let fpsAcc = 0, fpsCount = 0, fps = 0;
+let fpsAcc = 0, fpsCount = 0;
 
 renderer.setAnimationLoop((t) => {
   const dt = Math.min((t - lastT) / 1000, 0.05);
   lastT = t;
 
-  // controls + world + modules
   controls.update(dt, t/1000);
   world.update(dt, t/1000);
   for (const m of modules) m?.update?.(dt, t/1000);
 
   renderer.render(scene, camera);
 
-  // FPS calc (lightweight)
   fpsAcc += dt; fpsCount++;
   if (fpsAcc >= 0.5){
-    fps = Math.round(fpsCount / fpsAcc);
+    const fps = Math.round(fpsCount / fpsAcc);
     fpsAcc = 0; fpsCount = 0;
     const p = player.position;
     statline.textContent = `FPS ${fps} | pos ${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)} | XR ${renderer.xr.isPresenting ? "ON" : "OFF"}`;
   }
 });
 
-log("Boot complete. If you see black screen: open DevTools console / Android Chrome remote inspect.");
+log("Boot complete. Tip: do NOT run from file:// — use GitHub Pages or any HTTP server.");
