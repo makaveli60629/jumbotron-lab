@@ -1,29 +1,25 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>SCARLETT • World Orchestrator • Test Server</title>
-  <link rel="stylesheet" href="css/hud.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABC Live - Curved Jumbotron 4.1</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #vr-button { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; }
+    </style>
 </head>
-
 <body>
-  <!-- Minimal HUD (hidden by default; in-world buttons are primary on Quest) -->
-  <div id="hud" style="display:none;">
-    <div id="hudRow">
-      <button id="btnEnterVR" class="hudBtn">Enter VR</button>
-      <button id="btnToggleJumbo" class="hudBtn">Jumbotron: ON</button>
-      <button id="btnDiag" class="hudBtn">Diag</button>
-      <button id="btnHideHUD" class="hudBtn">Hide</button>
-    </div>
-    <pre id="diagPanel" class="hidden"></pre>
-  </div>
-
-  <div id="app"></div>
-
-  <script type="module">
-    import { boot } from "./js/orchestrator.js";
-    boot();
-  </script>
+    <video id="video-source" crossorigin="anonymous" playsinline muted autoplay style="display:none"></video>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="index.js"></script>
 </body>
 </html>
