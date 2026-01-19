@@ -35,9 +35,7 @@ export const World = {
 
     // Avatar preview system
     s.avatar = createAvatarApi(s);
-
-    // Try load default avatar if present (optional)
-    setTimeout(() => s.avatar.load("./assets/avatar.glb").catch(()=>{}), 60);
+    // Avatar is loaded MANUALLY from HUD to avoid mobile/Quest fetch stalls.
 
     log?.("World init OK. Use the Avatar Lab sliders + mirror to tune body scale/rotation.");
     return {
@@ -179,7 +177,10 @@ function createAvatarApi(s){
       skeletonHelper = null;
     }
 
-    const gltf = await new Promise((resolve, reject) => loader.load(resolved, resolve, undefined, reject));
+    const gltf = await Promise.race([
+    new Promise((resolve, reject) => loader.load(resolved, resolve, undefined, reject)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Avatar load timeout (6s)")), 6000))
+  ]);
     avatarRoot = gltf.scene || gltf.scenes?.[0];
     if (!avatarRoot) throw new Error("GLTF has no scene.");
 
