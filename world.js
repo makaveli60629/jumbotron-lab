@@ -1,100 +1,68 @@
 import * as THREE from 'three';
 
-let videoElement, videoTexture, jumbotron, diagPanel;
-let hlsInstance = null;
-
-const channels = [
+let video, jumbotron, diagPanel;
+const streamList = [
     "https://content.uplynk.com/channel/3324f2467c414329b3b0cc5cd987b6be.m3u8", // ABC
     "https://bloomberg.com/media-manifest/streams/us.m3u8", // Bloomberg
     "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master_2000.m3u8" // NASA
 ];
-let currentIdx = 0;
+let current = 0;
 let buttons = [];
 
 export function createWorld(scene) {
-    videoElement = document.getElementById('video-source');
-    loadChannel(channels[currentIdx]);
-    
-    videoTexture = new THREE.VideoTexture(videoElement);
-    videoTexture.colorSpace = THREE.SRGBColorSpace;
+    video = document.getElementById('video-source');
+    setupHLS(streamList[current]);
 
-    // 1. CURVED MESH (Stadium Style)
-    // CylinderGeometry(radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
-    const geo = new THREE.CylinderGeometry(12, 12, 7, 40, 1, true, Math.PI * 0.7, Math.PI * 0.6);
-    const mat = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+    const texture = new THREE.VideoTexture(video);
+    
+    // Curved Jumbotron
+    const geo = new THREE.CylinderGeometry(10, 10, 6, 32, 1, true, Math.PI * 0.7, Math.PI * 0.6);
+    const mat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
     jumbotron = new THREE.Mesh(geo, mat);
-    jumbotron.position.set(0, 4, -4);
-    jumbotron.rotation.y = Math.PI; // Correct orientation to face player
+    jumbotron.position.set(0, 3, -4);
+    jumbotron.rotation.y = Math.PI;
     scene.add(jumbotron);
 
-    // 2. TACTILE CONTROL BUTTONS
-    const btnConfigs = [
-        { name: 'PREV', pos: [-2, 0.5, -3], color: 0xff3333, act: () => cycle(-1) },
-        { name: 'NEXT', pos: [2, 0.5, -3], color: 0x3333ff, act: () => cycle(1) },
-        { name: 'MUTE', pos: [0, 0.5, -3], color: 0xffff33, act: () => videoElement.muted = !videoElement.muted },
-        { name: 'DIAG', pos: [0, 1.2, -3], color: 0x00ff00, act: () => diagPanel.visible = !diagPanel.visible }
-    ];
+    // Floating Buttons (Prev, Next, Mute, Diag)
+    const colors = [0xff0000, 0x0000ff, 0xffff00, 0x00ff00];
+    for (let i = 0; i < 4; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.1), new THREE.MeshStandardMaterial({ color: colors[i] }));
+        b.position.set(-0.6 + (i * 0.4), 0.5, -2);
+        b.userData = { id: i, lastHit: 0 };
+        scene.add(b);
+        buttons.push(b);
+    }
 
-    btnConfigs.forEach(cfg => {
-        const bGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
-        const bMat = new THREE.MeshStandardMaterial({ color: cfg.color });
-        const mesh = new THREE.Mesh(bGeo, bMat);
-        mesh.position.set(...cfg.pos);
-        mesh.userData = { action: cfg.act, lastTouch: 0 };
-        scene.add(mesh);
-        buttons.push(mesh);
-    });
-
-    // 3. DIAGNOSTICS PANEL (Android Monitoring)
-    diagPanel = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 0.5),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.7 })
-    );
-    diagPanel.position.set(-3, 2, -4);
-    diagPanel.visible = false;
-    scene.add(diagPanel);
-
+    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 1));
 }
 
-function loadChannel(url) {
-    if (hlsInstance) hlsInstance.destroy();
+function setupHLS(url) {
     if (Hls.isSupported()) {
-        hlsInstance = new Hls();
-        hlsInstance.loadSource(url);
-        hlsInstance.attachMedia(videoElement);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => videoElement.play());
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
     }
 }
 
-function cycle(dir) {
-    currentIdx = (currentIdx + dir + channels.length) % channels.length;
-    loadChannel(channels[currentIdx]);
-}
-
-export function updateWorld(hand1, hand2) {
+export function updateWorld(h1, h2) {
     const now = Date.now();
-    [hand1, hand2].forEach(hand => {
+    [h1, h2].forEach(hand => {
         if (hand.joints && hand.joints['index-finger-tip']) {
-            const tip = hand.joints['index-finger-tip'];
-            
+            const tip = hand.joints['index-finger-tip'].position;
             buttons.forEach(btn => {
-                const dist = tip.position.distanceTo(btn.position);
-                // Simple Debounced Touch detection (0.5s)
-                if (dist < 0.12 && now - btn.userData.lastTouch > 500) {
-                    btn.scale.set(0.8, 0.8, 0.8); // Visual feedback
-                    btn.userData.action();
-                    btn.userData.lastTouch = now;
-                    setTimeout(() => btn.scale.set(1, 1, 1), 200);
+                if (tip.distanceTo(btn.position) < 0.1 && now - btn.userData.lastHit > 500) {
+                    btn.userData.lastHit = now;
+                    handleInput(btn.userData.id);
                 }
             });
         }
     });
+}
 
-    // Update Diag readout if visible
-    if (diagPanel.visible) {
-        // In a real system, we would update a texture here, 
-        // for now, we log to console as you requested for Android checks.
-        if (now % 100 === 0) console.log("System Status:", window.systemFPS, "fps");
-    }
+function handleInput(id) {
+    if (id === 0) { current = (current - 1 + streamList.length) % streamList.length; setupHLS(streamList[current]); }
+    if (id === 1) { current = (current + 1) % streamList.length; setupHLS(streamList[current]); }
+    if (id === 2) { video.muted = !video.muted; }
+    if (id === 3) { console.log("Android FPS:", window.fps); }
 }
