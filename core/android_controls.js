@@ -4,6 +4,10 @@
 
 export class AndroidControls {
   constructor({ player, camera, dom, log }){
+    this._isHudTarget = (ev) => {
+      const t = ev.target;
+      return !!(t && t.closest && t.closest("#hud"));
+    };
     this.player = player;
     this.camera = camera;
     this.dom = dom;
@@ -69,7 +73,7 @@ export class AndroidControls {
 
   _onTouchStart(e){
     // prevent page scroll/zoom
-    e.preventDefault();
+    if (!this._isHudTarget(e)) e.preventDefault();
 
     for (const t of e.changedTouches){
       const isLeft = t.clientX < window.innerWidth * 0.5;
@@ -89,7 +93,7 @@ export class AndroidControls {
   }
 
   _onTouchMove(e){
-    e.preventDefault();
+    if (!this._isHudTarget(e)) e.preventDefault();
     for (const t of e.changedTouches){
       if (t.identifier === this.leftTouchId && this.leftOrigin){
         const dx = t.clientX - this.leftOrigin.x;
@@ -113,7 +117,7 @@ export class AndroidControls {
   }
 
   _onTouchEnd(e){
-    e.preventDefault();
+    if (!this._isHudTarget(e)) e.preventDefault();
     for (const t of e.changedTouches){
       if (t.identifier === this.leftTouchId){
         this.leftTouchId = null;
