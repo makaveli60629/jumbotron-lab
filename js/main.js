@@ -29,11 +29,28 @@ const clock = new THREE.Clock();
 // Player root (authoritative mover)
 const playerRoot = new THREE.Group();
 scene.add(playerRoot);
+// Spawn point (keeps you OUT of the table)
+playerRoot.position.set(0, 0, 4.2);
+playerRoot.rotation.y = Math.PI;
+
 
 // Build dev world
 const world = new DevWorld({ scene });
 world.buildBase();
 
+
+// Extra lighting (brighter dev space)
+const amb = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(amb);
+const p1 = new THREE.PointLight(0xffffff, 2.2, 40);
+p1.position.set(0, 4.2, 2.0);
+scene.add(p1);
+const p2 = new THREE.PointLight(0xffffff, 1.6, 40);
+p2.position.set(-6, 3.5, -6);
+scene.add(p2);
+const p3 = new THREE.PointLight(0xffffff, 1.6, 40);
+p3.position.set(6, 3.5, -6);
+scene.add(p3);
 // --- Poker Table (solid + pretty) ---
 const table = world.createPokerTable({ x: 0, z: 0.2, yaw: 0, scale: 1.0 });
 
@@ -230,6 +247,19 @@ renderer.setAnimationLoop(() => {
   if (input.release) cards.releaseHeld();
 
   seating.update(dt);
+
+  // Soft collision: prevent walking through the poker table (no physics needed)
+  // Table center is near (0, 0.2). Keep playerRoot outside a radius.
+  const tx = 0.0, tz = 0.2;
+  const dx = playerRoot.position.x - tx;
+  const dz = playerRoot.position.z - tz;
+  const r = 1.55; // approx table footprint radius
+  const d = Math.hypot(dx, dz);
+  if (d < r) {
+    const k = (r / Math.max(d, 0.0001));
+    playerRoot.position.x = tx + dx * k;
+    playerRoot.position.z = tz + dz * k;
+  }
 
   diag.render(gatherDiagLines());
   renderer.render(scene, camera);
