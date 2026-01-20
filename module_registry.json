@@ -1,0 +1,24 @@
+{
+  "modules": [
+    {
+      "id": "locomotion",
+      "path": "./js/avatar_walk_controller.js",
+      "enabled": true
+    },
+    {
+      "id": "hands",
+      "path": "./js/xr_hands_controller.js",
+      "enabled": true
+    },
+    {
+      "id": "cards",
+      "path": "./js/card_interactions.js",
+      "enabled": true
+    },
+    {
+      "id": "seating",
+      "path": "./js/seating_controller.js",
+      "enabled": true
+    }
+  ]
+}
