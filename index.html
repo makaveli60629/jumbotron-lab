@@ -2,128 +2,112 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Scarlett Test Lobby — NPC Bot Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NPC Bot Test (GitHub Pages Safe)</title>
   <style>
-    html, body { margin:0; height:100%; overflow:hidden; background:#0b0d10; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    #app { position:fixed; inset:0; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05060a;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
 
-    #hud {
+    #overlayDot {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-left: -4px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.55);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #ui {
       position: fixed;
       left: 12px;
       top: 12px;
       z-index: 10;
-      color: #e8edf7;
-      background: rgba(10, 14, 18, 0.62);
-      border: 1px solid rgba(255,255,255,0.12);
+      width: min(520px, calc(100vw - 24px));
+      color: rgba(255,255,255,0.95);
+    }
+
+    .panel {
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.95);
       border-radius: 12px;
-      padding: 10px 10px;
-      min-width: 280px;
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-    }
-    #hud h1 {
+      padding: 10px 12px;
       font-size: 14px;
-      margin: 0 0 8px 0;
-      letter-spacing: 0.2px;
-      font-weight: 650;
+      font-weight: 600;
+    }
+    button:active { transform: scale(0.99); }
+
+    #status {
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.35;
       opacity: 0.95;
+      white-space: pre-wrap;
     }
-    #hud .row { display:flex; gap:8px; flex-wrap:wrap; margin: 6px 0; }
-    #hud button {
-      cursor: pointer;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(255,255,255,0.06);
-      color: #e8edf7;
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 12px;
-    }
-    #hud button:hover { background: rgba(255,255,255,0.10); }
-    #hud .hint { font-size: 12px; opacity: 0.82; line-height: 1.25; }
 
     #diag {
       position: fixed;
       right: 12px;
       top: 12px;
       z-index: 10;
-      color: #e8edf7;
-      background: rgba(10, 14, 18, 0.62);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      padding: 10px 12px;
-      min-width: 280px;
-      max-width: 420px;
-      white-space: pre-wrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 11px;
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      width: min(380px, calc(100vw - 24px));
+      display: none;
     }
 
-    #toast {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 18px;
-      z-index: 20;
-      background: rgba(10, 14, 18, 0.72);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 999px;
-      padding: 10px 14px;
-      color: #e8edf7;
+    #diag pre {
+      margin: 0;
       font-size: 12px;
-      opacity: 0;
-      transition: opacity 180ms ease;
-      pointer-events: none;
+      line-height: 1.35;
+      color: rgba(255,255,255,0.92);
+      white-space: pre-wrap;
     }
-    #toast.show { opacity: 1; }
 
-    #crosshair {
-      position: fixed;
-      left: 50%; top: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 5;
-      width: 10px; height: 10px;
-      border: 1px solid rgba(255,255,255,0.45);
-      border-radius: 50%;
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.25);
-      opacity: 0.9;
-      pointer-events:none;
-    }
+    a { color: rgba(180,210,255,0.95); }
   </style>
-
-  <!-- Import map for Three.js (CDN) -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-    }
-  }
-  </script>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="overlayDot"></div>
 
-  <div id="hud">
-    <h1>Scarlett Lobby Bot Demo</h1>
+  <div id="ui" class="panel">
     <div class="row">
-      <button id="btnPointer">Enable Mouse Look</button>
+      <button id="btnMouse">Enable Mouse Look</button>
       <button id="btnReset">Reset Position</button>
-      <button id="btnToggleDiag">Toggle Diagnostics</button>
+      <button id="btnDiag">Toggle Diagnostics</button>
+      <span id="xrSlot"></span>
     </div>
-    <div class="hint">
-      Controls: <b>WASD</b> move, <b>Shift</b> run, <b>Space</b> up, <b>C</b> down. Click "Enable Mouse Look" for FPS style.
-      <br/>NPC: One avatar is displayed on a pedestal, and one bot walks around the table.
+    <div id="status">Booting…</div>
+    <div style="margin-top:8px; font-size:13px; opacity:0.9;">
+      Controls: <b>WASD</b> move, <b>Shift</b> run, <b>Space</b> up, <b>C</b> down. Tap “Enable Mouse Look” for FPS-style.
+      <br/>NPC: one avatar is displayed on a pedestal; one bot walks around the table.
+      <br/>If you see a black screen, open DevTools console — this build is GitHub-Pages-safe (CDN imports).
     </div>
   </div>
 
-  <div id="diag">Booting...</div>
-  <div id="toast"></div>
-  <div id="crosshair"></div>
+  <div id="diag" class="panel"><pre id="diagText">Diagnostics…</pre></div>
 
   <script type="module" src="./js/main.js"></script>
 </body>
