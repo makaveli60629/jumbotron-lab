@@ -1,56 +1,128 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<title>Update 4.6.2 – Avatar-only Upgrade (Keeps Spine Diagnostics)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-<style>
-  body{margin:0;overflow:hidden;background:#0b0b0b;font-family:Arial,Helvetica,sans-serif}
-  #hud{
-    position:fixed;left:10px;top:10px;z-index:10;color:#fff;font-size:12px;line-height:1.35;
-    background:rgba(0,0,0,.45);padding:10px 12px;border-radius:12px;max-width:80vw
-  }
-  #hud b{font-size:13px}
-  #btnBar{position:fixed;right:12px;top:12px;z-index:11;display:flex;gap:8px;flex-wrap:wrap;max-width:70vw;justify-content:flex-end}
-  .btn{
-    pointer-events:auto;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
-    color:#fff;padding:8px 10px;border-radius:10px;font-size:12px
-  }
-  #touchUI{position:fixed;inset:0;pointer-events:none;z-index:9}
-  .stick{
-    position:absolute;width:140px;height:140px;border-radius:999px;background:rgba(255,255,255,.06);
-    border:1px solid rgba(255,255,255,.14);pointer-events:auto;touch-action:none
-  }
-  #stickL{left:16px;bottom:20px}
-  #stickR{right:16px;bottom:20px}
-  .nub{
-    position:absolute;left:50%;top:50%;width:56px;height:56px;margin-left:-28px;margin-top:-28px;border-radius:999px;
-    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22)
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Poker Sound Test Server (Avatar Sandbox)</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.65), rgba(0,0,0,0.9));
+      color: #fff;
+      z-index: 9;
+    }
+    #card {
+      width: min(560px, 92vw);
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 16px;
+      background: rgba(15,15,15,0.75);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    }
+    #card h1 { font-size: 18px; margin: 0 0 10px; }
+    #card p { margin: 0 0 14px; line-height: 1.35; opacity: 0.92; }
+    #btn {
+      width: 100%;
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 650;
+      background: #ffffff;
+      color: #000;
+    }
+    #small { margin-top: 10px; font-size: 12px; opacity: 0.8; }
+  </style>
 </head>
 <body>
-<div id="hud">
-  <b>Update 4.6.2</b> — Avatar-only upgrade (Spine diagnostics preserved)<br/>
-  <div id="status"></div>
-  <div id="vrMsg" style="opacity:.85"></div>
-  <div style="opacity:.85;margin-top:6px">
-    Android: Left stick = move, Right stick = look. Quest: use Meta/Oculus Browser for VR.
+  <div id="overlay">
+    <div id="card">
+      <h1>Poker Sound Test Server</h1>
+      <p>
+        Tap <b>Enable Audio</b>, then walk up to the table and click the pads (or use VR controller buttons) to test your SFX library.
+      </p>
+      <button id="btn">Enable Audio</button>
+      <div id="small">Quest: Enter VR → point laser at pads → trigger. Buttons also mapped (see sign on table).</div>
+    </div>
   </div>
-</div>
 
-<div id="btnBar">
-  <button class="btn" id="toggleHUD">HUD</button>
-  <button class="btn" id="reset">Reset</button>
-  <button class="btn" id="toggleSpine">Spine</button>
-  <button class="btn" id="toggleIK">IK</button>
-</div>
+  <a-scene renderer="colorManagement: true" background="color: #0a0a0a">
+    <!-- Lights -->
+    <a-entity light="type: ambient; intensity: 0.55"></a-entity>
+    <a-entity light="type: directional; intensity: 0.85" position="-2 4 2"></a-entity>
 
-<div id="touchUI">
-  <div class="stick" id="stickL"><div class="nub" id="nubL"></div></div>
-  <div class="stick" id="stickR"><div class="nub" id="nubR"></div></div>
-</div>
+    <!-- Floor -->
+    <a-plane rotation="-90 0 0" width="40" height="40" color="#111"></a-plane>
 
-<script type="module" src="./index.js"></script>
+    <!-- Camera rig -->
+    <a-entity id="rig" position="0 1.6 3">
+      <a-camera id="cam" wasd-controls="acceleration: 22" look-controls></a-camera>
+      <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 20"></a-entity>
+      <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 20"></a-entity>
+      <a-entity controller-sfx></a-entity>
+    </a-entity>
+
+    <!-- Table -->
+    <a-cylinder position="0 0.95 0" radius="1.15" height="0.12" color="#0b5f3a"></a-cylinder>
+    <a-cylinder position="0 0.48 0" radius="0.18" height="0.9" color="#2a2a2a"></a-cylinder>
+
+    <!-- Pads -->
+    <a-entity position="0 1.02 0">
+      <a-box class="clickable" sfx-pad="effect: dealTwo" position="-0.75 0.03 0.55" depth="0.18" height="0.04" width="0.38" color="#ffffff"></a-box>
+      <a-text value="DEAL" position="-0.84 0.09 0.55" width="1" color="#000"></a-text>
+
+      <a-box class="clickable" sfx-pad="effect: stack" position="-0.25 0.03 0.55" depth="0.18" height="0.04" width="0.38" color="#e8e8e8"></a-box>
+      <a-text value="STACK" position="-0.36 0.09 0.55" width="1" color="#000"></a-text>
+
+      <a-box class="clickable" sfx-pad="effect: knock" position="0.25 0.03 0.55" depth="0.18" height="0.04" width="0.38" color="#e8e8e8"></a-box>
+      <a-text value="KNOCK" position="0.14 0.09 0.55" width="1" color="#000"></a-text>
+
+      <a-box class="clickable" sfx-pad="effect: vacuum" position="0.75 0.03 0.55" depth="0.18" height="0.04" width="0.38" color="#ffffff"></a-box>
+      <a-text value="VACUUM" position="0.62 0.09 0.55" width="1" color="#000"></a-text>
+
+      <a-box class="clickable" sfx-pad="effect: slide" position="0 0.03 0.18" depth="0.18" height="0.04" width="0.52" color="#d9d9d9"></a-box>
+      <a-text value="CARD SLIDE" position="-0.22 0.09 0.18" width="1.8" color="#000"></a-text>
+    </a-entity>
+
+    <!-- Controller mapping sign -->
+    <a-plane position="0 1.45 -0.95" width="2.6" height="1.0" color="#101010"></a-plane>
+    <a-text
+      value="Controller SFX\nTrigger: DEAL\nSqueeze: STACK\nA/X: KNOCK\nB/Y: VACUUM\nThumbstick Click: SLIDE"
+      position="-1.2 1.78 -0.94"
+      width="3.2"
+      color="#ffffff">
+    </a-text>
+
+    <!-- Simple backdrop -->
+    <a-sphere position="-4 2 -6" radius="1" color="#202020"></a-sphere>
+    <a-sphere position="4 1.7 -5" radius="0.7" color="#1b1b1b"></a-sphere>
+
+  </a-scene>
+
+  <script type="module" src="js/app.js"></script>
+
+  <script type="module">
+    import { AudioManager } from './js/audio_manager.js';
+
+    const overlay = document.getElementById('overlay');
+    const btn = document.getElementById('btn');
+
+    btn.addEventListener('click', async () => {
+      await AudioManager.unlock();
+      overlay.style.display = 'none';
+
+      // Preload everything for instant snap
+      ['dealTwo','stack','knock','vacuum','slide'].forEach(k => AudioManager.preload(k));
+
+      // confirm audio is live
+      AudioManager.play('dealTwo');
+    });
+  </script>
 </body>
 </html>
