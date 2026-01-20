@@ -1,192 +1,305 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js';
 import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.158/examples/jsm/webxr/VRButton.js';
-import { createPerfectAvatar } from './avatar_engine.js';
-import { updateAvatarIdle, updateAvatarWalk, mirrorHandsToControllers } from './avatar_logic.js';
-import { setupTouchControls } from './touch_controls.js';
-import { createSpineDiagnostic } from './diagnostics.js';
 
-const statusEl = document.getElementById('status');
-const vrMsgEl = document.getElementById('vrMsg');
+import { HumanoidAvatar } from './HumanoidAvatar.js';
+import { animateHumanoid } from './MovementEngine.js';
+import { SpineDiagnostics, setDiagText, toast } from './diagnostics.js';
+import { TouchSticks } from './touch_controls.js';
+import { createPokerTable } from './table_poker.js';
+import { createJumbotron } from './jumbotron.js';
 
-// Scene
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x121212);
+const canvas = document.getElementById('c');
+const diagEl = document.getElementById('diag');
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 250);
-camera.position.set(0, 1.65, 6);
-
-// Renderer
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
 
-// XR support message + VRButton
-let xrSupported = false;
-async function initXR(){
-  try { xrSupported = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr')); }
-  catch { xrSupported = false; }
-  vrMsgEl.textContent = xrSupported
-    ? 'WebXR: immersive-vr supported. (Quest: press Enter VR)'
-    : 'WebXR NOT available here. (Android Chrome often) — use Meta/Oculus Browser for VR. Debug controls still work.';
-  if (xrSupported) document.body.appendChild(VRButton.createButton(renderer));
-}
-initXR();
+renderer.xr.enabled = true;
+document.body.appendChild(VRButton.createButton(renderer));
 
-// Lighting (slightly polished, still simple)
-scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.85));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0f14);
 
-const key = new THREE.DirectionalLight(0xffffff, 0.95);
-key.position.set(6, 10, 4);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.02, 100);
+camera.position.set(0, 1.65, 3.2);
+
+// Player rig (yaw + pitch)
+const rig = new THREE.Group();
+rig.position.set(0, 0, 2.6); // spawn safe away from walls
+scene.add(rig);
+
+const yaw = new THREE.Group();
+const pitch = new THREE.Group();
+rig.add(yaw);
+yaw.add(pitch);
+pitch.add(camera);
+
+// Lights (requested)
+const hemi = new THREE.HemisphereLight(0xbad7ff, 0x14202c, 0.8);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xffffff, 1.15);
+key.position.set(4, 7, 3);
 key.castShadow = true;
-key.shadow.mapSize.set(2048,2048);
+key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.near = 0.5;
-key.shadow.camera.far  = 40;
+key.shadow.camera.far = 30;
+key.shadow.camera.left = -8;
+key.shadow.camera.right = 8;
+key.shadow.camera.top = 8;
+key.shadow.camera.bottom = -8;
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xffffff, 0.25);
-fill.position.set(-6, 6, -4);
+const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+fill.position.set(-4, 5, -3);
 scene.add(fill);
 
-const rim = new THREE.PointLight(0xffffff, 0.25, 20);
-rim.position.set(0, 3, -6);
-scene.add(rim);
+// Room (bigger, no wall spawn)
+const room = new THREE.Group();
+scene.add(room);
 
-// Floor (bigger room so you don't spawn into a wall)
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(60, 60),
-  new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 1 })
-);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x151b22, roughness: 0.95, metalness: 0.0 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(18, 18), floorMat);
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
-scene.add(floor);
+room.add(floor);
 
-// Table (dev reference)
-const tableTop = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.95, 0.95, 0.14, 64),
-  new THREE.MeshStandardMaterial({ color: 0x0b6b2b, roughness: 0.9 })
-);
-tableTop.position.set(0, 0.78, 0);
-tableTop.castShadow = true;
-scene.add(tableTop);
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x10161d, roughness: 0.9, metalness: 0.05 });
 
-const tableBase = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.25, 0.35, 0.75, 32),
-  new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1.0 })
-);
-tableBase.position.set(0, 0.375, 0);
-tableBase.castShadow = true;
-scene.add(tableBase);
-
-// Avatars: male + female display, and one walking bot (uses spine diagnostics)
-const male = createPerfectAvatar('male');
-male.position.set(-2.6, 0, -1.6);
-scene.add(male);
-
-const female = createPerfectAvatar('female');
-female.position.set(-4.0, 0, -1.6);
-scene.add(female);
-
-const walker = createPerfectAvatar('male');
-walker.position.set(3, 0, -2);
-scene.add(walker);
-
-// Spine diagnostics line for walker (PRESERVED)
-let spineOn = true;
-const spine = createSpineDiagnostic(scene, walker);
-spine.line.visible = spineOn;
-
-// Touch controls (Android)
-const touch = setupTouchControls();
-let yaw = 0;
-let pitch = 0;
-
-// Buttons
-const hud = document.getElementById('hud');
-document.getElementById('toggleHUD').onclick = () => {
-  hud.style.display = (hud.style.display === 'none') ? 'block' : 'none';
-};
-document.getElementById('reset').onclick = () => {
-  camera.position.set(0, 1.65, 6);
-  yaw = 0; pitch = 0;
-};
-document.getElementById('toggleSpine').onclick = () => {
-  spineOn = !spineOn;
-  spine.line.visible = spineOn;
-};
-
-let ikOn = true;
-document.getElementById('toggleIK').onclick = () => { ikOn = !ikOn; };
-
-// Controllers (Quest)
-const controllers = [renderer.xr.getController(0), renderer.xr.getController(1)];
-controllers.forEach(c => scene.add(c));
-
-// Diagnostics HUD
-let fps=0, frames=0, lastFpsT=performance.now();
-function hudUpdate(){
-  const p = camera.position;
-  const jCount = Object.keys((walker.userData && walker.userData.joints) ? walker.userData.joints : {}).length;
-  statusEl.textContent = `Mode: ${renderer.xr.isPresenting ? 'VR' : 'Debug'} | XR: ${xrSupported?'Yes':'No'} | IK: ${ikOn?'On':'Off'} | Spine: ${spineOn?'On':'Off'} | FPS: ${fps.toFixed(0)} | Joints: ${jCount} | Cam: (${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)})`;
+function wall(w,h, x,y,z, ry=0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), wallMat);
+  m.position.set(x,y,z);
+  m.rotation.y = ry;
+  m.receiveShadow = true;
+  room.add(m);
+  return m;
 }
+wall(18, 6, 0, 3, -9, 0);
+wall(18, 6, 0, 3,  9, Math.PI);
+wall(18, 6, -9, 3, 0, Math.PI/2);
+wall(18, 6,  9, 3, 0, -Math.PI/2);
 
-// Main loop
-const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
-  const t  = clock.getElapsedTime();
+// A subtle back wall accent light strip
+const strip = new THREE.Mesh(new THREE.BoxGeometry(10, 0.08, 0.08), new THREE.MeshStandardMaterial({
+  color: 0xffffff, emissive: 0x2a8cff, emissiveIntensity: 1.4, roughness: 0.2, metalness: 0.1
+}));
+strip.position.set(0, 2.4, -8.95);
+room.add(strip);
 
-  // Android look+move when not in XR
-  if (!renderer.xr.isPresenting) {
-    yaw   += (-touch.lookX) * dt * 2.4;
-    pitch += (-touch.lookY) * dt * 1.8;
-    pitch = Math.max(-1.0, Math.min(1.0, pitch));
+// Table (felt + pass line)
+const table = createPokerTable();
+table.position.set(0, 0, 0);
+room.add(table);
 
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
+// Display pads for male/female
+const padMat = new THREE.MeshStandardMaterial({ color: 0x1c2630, roughness: 0.7, metalness: 0.05, emissive: 0x04111c, emissiveIntensity: 0.8 });
+function pad(x,z,label) {
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.08, 32), padMat);
+  p.position.set(x, 0.04, z);
+  p.receiveShadow = true;
+  p.castShadow = true;
+  room.add(p);
 
-    const forward = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0, yaw, 0));
-    const right   = new THREE.Vector3(1,0, 0).applyEuler(new THREE.Euler(0, yaw, 0));
-    const speed = 2.2;
-    camera.position.addScaledVector(forward, (-touch.moveY) * dt * speed);
-    camera.position.addScaledVector(right,   ( touch.moveX) * dt * speed);
-    camera.position.y = 1.65;
-  }
+  // label via small canvas texture
+  const c = document.createElement('canvas'); c.width=256; c.height=64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0,0,256,64);
+  ctx.font = 'bold 36px system-ui, Arial';
+  ctx.fillStyle = '#e8e3d6';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(label, 128, 32);
+  const tex = new THREE.CanvasTexture(c);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.14), new THREE.MeshStandardMaterial({ map: tex, transparent:true }));
+  plane.rotation.x = -Math.PI/2;
+  plane.position.set(x, 0.085, z+0.46);
+  room.add(plane);
 
-  // Display avatars: idle only
-  updateAvatarIdle(male, t);
-  updateAvatarIdle(female, t);
+  return p;
+}
+pad(-1.3, -1.0, 'FEMALE');
+pad( 1.3, -1.0, 'MALE');
 
-  // Walker: patrol + walk
-  const R = 4.2;
-  walker.position.x = Math.sin(t * 0.45) * R;
-  walker.position.z = Math.cos(t * 0.45) * R;
-  walker.rotation.y = t * 0.45 + Math.PI/2;
-  updateAvatarWalk(walker, t);
+// Avatars: female + male display
+const female = new HumanoidAvatar({ gender:'female', skinColor:0xd9b39c, clothingColor:0x2b3a4a, scale: 1.0 });
+female.root.position.set(-1.3, 0.0, -1.0);
+room.add(female.root);
+animateHumanoid(female, 0, 'idle');
 
-  // Spine diagnostic line updates (PRESERVED)
-  if (spineOn) spine.update();
+const male = new HumanoidAvatar({ gender:'male', skinColor:0xd3ad8f, clothingColor:0x2b2f38, scale: 1.0 });
+male.root.position.set(1.3, 0.0, -1.0);
+room.add(male.root);
+animateHumanoid(male, 0, 'idle');
 
-  // Hands mirroring to controllers (VR only)
-  mirrorHandsToControllers(renderer, walker, controllers, ikOn);
+// Walking bot (male, patrol) + tracking
+const walker = new HumanoidAvatar({ gender:'male', skinColor:0xd3ad8f, clothingColor:0x1f2a34, scale: 1.0 });
+walker.root.position.set(0.0, 0.0, -4.2);
+room.add(walker.root);
 
-  // FPS update
-  frames++;
-  const now = performance.now();
-  if (now - lastFpsT > 500) {
-    fps = (frames * 1000) / (now - lastFpsT);
-    frames=0; lastFpsT=now;
-    hudUpdate();
-  }
+// Patrol path (simple rectangle)
+const path = [
+  new THREE.Vector3(-3.8, 0, -4.8),
+  new THREE.Vector3( 3.8, 0, -4.8),
+  new THREE.Vector3( 3.8, 0,  2.2),
+  new THREE.Vector3(-3.8, 0,  2.2),
+];
+let pathIdx = 0;
 
-  renderer.render(scene, camera);
+// Jumbotron on wall above avatars
+const j = createJumbotron({ width: 4.8, height: 2.7 });
+j.group.position.set(0, 3.2, -8.75);
+room.add(j.group);
+j.tryPlay();
+
+// Touch controls
+const sticks = new TouchSticks();
+let showSticks = true; // always on for Android debugging
+document.getElementById('stickL')?.classList.toggle('hidden', !showSticks);
+document.getElementById('stickR')?.classList.toggle('hidden', !showSticks);
+
+// Diagnostics
+const spineDiag = new SpineDiagnostics(scene, walker, { color: 0x00ff88 });
+let spineOn = true;
+
+document.getElementById('btnSpine')?.addEventListener('click', () => {
+  spineOn = !spineOn;
+  spineDiag.setEnabled(spineOn);
+  document.getElementById('btnSpine').textContent = `Spine: ${spineOn ? 'ON' : 'OFF'}`;
 });
 
-addEventListener('resize', () => {
+document.getElementById('btnReset')?.addEventListener('click', () => {
+  rig.position.set(0, 0, 2.6);
+  yaw.rotation.y = 0;
+  pitch.rotation.x = 0;
+  toast('Reset position');
+});
+
+document.getElementById('btnUnmute')?.addEventListener('click', async () => {
+  await j.unmute();
+});
+
+// Unmute attempt on XR session start (still requires user gesture on many browsers)
+renderer.xr.addEventListener('sessionstart', async () => {
+  toast('XR session started');
+  await j.unmute();
+});
+
+// Movement params
+const moveSpeed = 2.0; // m/s
+const lookSpeed = 1.6; // rad/s
+const tmpVec = new THREE.Vector3();
+let lastT = performance.now();
+
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+function stepPlayer(dt) {
+  // Left stick move: x strafe, y forward (screen up is negative dy; we use -y)
+  const mx = sticks.move.x;
+  const my = sticks.move.y;
+
+  const forward = -my; // up on stick = forward
+  const strafe = mx;
+
+  // yaw basis
+  tmpVec.set(strafe, 0, forward);
+  if (tmpVec.lengthSq() > 1e-6) tmpVec.normalize();
+
+  tmpVec.multiplyScalar(moveSpeed * dt);
+
+  // rotate move vector by yaw
+  const ang = yaw.rotation.y;
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const dx = tmpVec.x * cos - tmpVec.z * sin;
+  const dz = tmpVec.x * sin + tmpVec.z * cos;
+
+  rig.position.x += dx;
+  rig.position.z += dz;
+
+  // Keep within room bounds (soft clamp)
+  rig.position.x = clamp(rig.position.x, -7.5, 7.5);
+  rig.position.z = clamp(rig.position.z, -7.5, 7.5);
+
+  // Right stick look
+  yaw.rotation.y -= sticks.look.x * lookSpeed * dt;
+  pitch.rotation.x -= sticks.look.y * lookSpeed * dt;
+  pitch.rotation.x = clamp(pitch.rotation.x, -1.0, 1.0);
+}
+
+function stepWalker(timeSec, dt) {
+  // Move along path
+  const pos = walker.root.position;
+  const target = path[pathIdx];
+  const to = target.clone().sub(pos);
+  const dist = to.length();
+  const speed = 1.2;
+
+  if (dist < 0.10) {
+    pathIdx = (pathIdx + 1) % path.length;
+  } else {
+    to.normalize();
+    pos.add(to.multiplyScalar(speed * dt));
+
+    // Face direction of motion (avatar forward is -Z, so lookAt a point ahead)
+    const lookPt = pos.clone().add(to);
+    walker.root.lookAt(lookPt.x, lookPt.y + 1.2, lookPt.z);
+    walker.root.rotation.x = 0;
+    walker.root.rotation.z = 0;
+  }
+
+  // Walk anim + tracking
+  animateHumanoid(walker, timeSec, 'walk');
+
+  // tracking target is player's head (camera world pos)
+  const camWorld = new THREE.Vector3();
+  camera.getWorldPosition(camWorld);
+  walker.updateTracking(camWorld, 1.0);
+}
+
+function updateDiag(timeSec) {
+  const fps = Math.round(1/Math.max(0.0001, (performance.now()-lastT)/1000));
+  setDiagText(diagEl, [
+    `XR: ${renderer.xr.isPresenting ? 'ON' : 'OFF'} | FPS≈${fps}`,
+    `Player: x=${rig.position.x.toFixed(2)} z=${rig.position.z.toFixed(2)}`,
+    `Jumbotron: ${j.video?.paused ? 'paused' : 'playing'} | muted=${j.video?.muted ? 'yes' : 'no'}`,
+    `Walker: elbows/knees fixed | Tracking: ON`,
+    `Touch: L(move) R(look)`
+  ]);
+}
+
+window.addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+renderer.setAnimationLoop(() => {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  const timeSec = now / 1000;
+
+  // Update player (only when not in XR; in XR headset drives camera)
+  if (!renderer.xr.isPresenting) {
+    stepPlayer(dt);
+  }
+
+  // Display avatars idle
+  animateHumanoid(female, timeSec, 'idle');
+  animateHumanoid(male, timeSec, 'idle');
+
+  // Walker
+  stepWalker(timeSec, dt);
+
+  // Spine diag (walker)
+  spineDiag.update();
+
+  updateDiag(timeSec);
+
+  renderer.render(scene, camera);
+});
+
+// Helpful first toast
+toast('If video is dark: tap Unmute. Autoplay with audio is often blocked on mobile.');

@@ -1,19 +1,73 @@
-export function setupTouchControls(){
-  const state={moveX:0,moveY:0,lookX:0,lookY:0};
-  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-  function bind(stick,nub,setFn){
-    let active=false; let ox=0,oy=0; const max=46;
-    const down=(e)=>{active=true;const t=e.touches[0];ox=t.clientX;oy=t.clientY;nub.style.transform='translate(0px,0px)';e.preventDefault();};
-    const move=(e)=>{if(!active)return;const t=e.touches[0];const dx=t.clientX-ox;const dy=t.clientY-oy;
-      const cx=clamp(dx,-max,max);const cy=clamp(dy,-max,max);
-      nub.style.transform=`translate(${cx}px,${cy}px)`;setFn(cx/max,cy/max);e.preventDefault();};
-    const up=(e)=>{active=false;nub.style.transform='translate(0px,0px)';setFn(0,0);e.preventDefault();};
-    stick.addEventListener('touchstart',down,{passive:false});
-    stick.addEventListener('touchmove',move,{passive:false});
-    stick.addEventListener('touchend',up,{passive:false});
-    stick.addEventListener('touchcancel',up,{passive:false});
+/**
+ * Dual-stick touch controls for Android debugging.
+ * - Left stick: move (x = strafe, y = forward)
+ * - Right stick: look (x = yaw, y = pitch)
+ */
+export class TouchSticks {
+  constructor({
+    stickL = document.getElementById('stickL'),
+    stickR = document.getElementById('stickR'),
+    max = 42
+  } = {}) {
+    this.stickL = stickL;
+    this.stickR = stickR;
+    this.max = max;
+
+    this.move = { x: 0, y: 0 };
+    this.look = { x: 0, y: 0 };
+
+    this._bind(this.stickL, (v) => this.move = v);
+    this._bind(this.stickR, (v) => this.look = v);
   }
-  bind(document.getElementById('stickL'),document.getElementById('nubL'),(x,y)=>{state.moveX=x;state.moveY=y;});
-  bind(document.getElementById('stickR'),document.getElementById('nubR'),(x,y)=>{state.lookX=x;state.lookY=y;});
-  return state;
+
+  _bind(stick, setter) {
+    if (!stick) return;
+    const nub = stick.querySelector('.nub');
+
+    let pid = null;
+    let start = { x: 0, y: 0 };
+
+    const setNub = (dx, dy) => {
+      if (!nub) return;
+      nub.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+
+    const onDown = (e) => {
+      pid = e.pointerId;
+      stick.setPointerCapture(pid);
+      start = { x: e.clientX, y: e.clientY };
+      setter({ x: 0, y: 0 });
+      setNub(0, 0);
+    };
+
+    const onMove = (e) => {
+      if (pid !== e.pointerId) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+
+      const len = Math.hypot(dx, dy);
+      const cl = Math.min(this.max, len);
+      const nx = len > 0 ? dx / len : 0;
+      const ny = len > 0 ? dy / len : 0;
+
+      const mx = nx * (cl / this.max);
+      const my = ny * (cl / this.max);
+
+      setNub(mx * this.max, my * this.max);
+      setter({ x: mx, y: my });
+    };
+
+    const onUp = (e) => {
+      if (pid !== e.pointerId) return;
+      pid = null;
+      setter({ x: 0, y: 0 });
+      setNub(0, 0);
+    };
+
+    stick.addEventListener('pointerdown', onDown, { passive: true });
+    stick.addEventListener('pointermove', onMove, { passive: true });
+    stick.addEventListener('pointerup', onUp, { passive: true });
+    stick.addEventListener('pointercancel', onUp, { passive: true });
+    stick.addEventListener('lostpointercapture', onUp, { passive: true });
+  }
 }
