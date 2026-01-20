@@ -1,5 +1,5 @@
-// NPC Bot Test - GitHub Pages Safe
-// Uses CDN module imports (no importmap, no bare specifiers)
+// NPC Bot Test - GitHub Pages Safe (v2)
+// Fix: render loop starts immediately; GLBs load asynchronously so the scene never hangs at "Booting…".
 
 import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
 import { GLTFLoader } from "https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js";
@@ -21,16 +21,21 @@ function setStatus(msg) {
   if (UI.status) UI.status.textContent = msg;
 }
 
-// ---- Catch errors (so black screen always shows something) ----
+function appendDiag(msg) {
+  if (!UI.diagText) return;
+  UI.diagText.textContent = (UI.diagText.textContent || "") + "\n" + msg;
+}
+
+// ---- Catch errors so you ALWAYS see a reason ----
 window.addEventListener("error", (e) => {
   console.error(e?.error || e);
   setStatus("❌ Error: " + (e.message || "Unknown"));
-  if (UI.diag) UI.diag.textContent += `\n[window.error] ${e.message || e}`;
+  appendDiag(`[window.error] ${e.message || e}`);
 });
 window.addEventListener("unhandledrejection", (e) => {
   console.error(e?.reason || e);
   setStatus("❌ Promise Error: " + (e.reason?.message || String(e.reason)));
-  if (UI.diag) UI.diag.textContent += `\n[unhandledrejection] ${e.reason?.message || e.reason}`;
+  appendDiag(`[unhandledrejection] ${e.reason?.message || e.reason}`);
 });
 
 // ---- Renderer / Scene ----
@@ -53,6 +58,7 @@ try {
   document.body.appendChild(VRButton.createButton(renderer));
 } catch (e) {
   console.warn("VRButton error", e);
+  appendDiag("VRButton not available on this browser.");
 }
 
 // Lights
@@ -105,209 +111,256 @@ for (let i = 0; i < 4; i++) {
 }
 scene.add(tableGroup);
 
-// Pedestal for "display" avatar
-const pedestal = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.6, 0.7, 0.6, 24),
-  new THREE.MeshStandardMaterial({ color: 0x202431, roughness: 0.8, metalness: 0.1 })
-);
-pedestal.position.set(-4, 0.3, 0);
-pedestal.castShadow = true;
-pedestal.receiveShadow = true;
-scene.add(pedestal);
+// Pedestals (male + female)
+function makePedestal(x, z) {
+  const pedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 0.7, 0.6, 24),
+    new THREE.MeshStandardMaterial({ color: 0x202431, roughness: 0.8, metalness: 0.1 })
+  );
+  pedestal.position.set(x, 0.3, z);
+  pedestal.castShadow = true;
+  pedestal.receiveShadow = true;
+  scene.add(pedestal);
 
-// Simple "stage" ring
-const stage = new THREE.Mesh(
-  new THREE.RingGeometry(0.9, 1.2, 48),
-  new THREE.MeshStandardMaterial({ color: 0x0f1420, roughness: 1, metalness: 0 })
-);
-stage.position.set(-4, 0.01, 0);
-stage.rotation.x = -Math.PI / 2;
-scene.add(stage);
+  const stage = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1.2, 48),
+    new THREE.MeshStandardMaterial({ color: 0x0f1420, roughness: 1, metalness: 0 })
+  );
+  stage.position.set(x, 0.01, z);
+  stage.rotation.x = -Math.PI / 2;
+  scene.add(stage);
 
-// ---- Load avatars ----
+  return pedestal;
+}
+
+makePedestal(-4, 0);
+makePedestal(-4, -3);
+
+// ---- Load GLBs asynchronously (do not block rendering) ----
 const loader = new GLTFLoader();
-
-async function loadGLB(url) {
+function loadGLB(url) {
   return new Promise((resolve, reject) => {
     loader.load(
       url,
       (gltf) => resolve(gltf),
-      undefined,
+      (prog) => {
+        if (prog?.total) {
+          const pct = Math.round((prog.loaded / prog.total) * 100);
+          setStatus(`Loading… ${pct}%`);
+        }
+      },
       (err) => reject(err)
     );
   });
 }
 
-async function boot() {
-  setStatus("Booting…");
-
-  // Display avatar
-  try {
-    const displayGLB = await loadGLB("./assets/avatars/Character_output.glb");
-    const display = displayGLB.scene;
-    display.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-        if (o.material) o.material.side = THREE.DoubleSide;
-      }
-    });
-    display.position.set(-4, 0.6, 0);
-    display.scale.setScalar(1.0);
-    // face toward center
-    display.rotation.y = Math.PI / 2;
-    scene.add(display);
-  } catch (e) {
-    console.warn("Display avatar failed", e);
-    if (UI.diag) UI.diag.textContent += `\nDisplay avatar load failed: ${e?.message || e}`;
-  }
-
-  // Bot manager
-  const navTargets = [];
-  // orbit points around table
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    navTargets.push(new THREE.Vector3(Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2));
-  }
-
-  const bots = new BotManager({
-    scene,
-    THREE,
-    GLTFLoader,
-    SkeletonUtils,
-    navTargets,
-    debug: false,
-  });
-
-  try {
-    await bots.spawnBots({
-      avatarUrl: "./assets/avatars/Meshy_Merged_Animations.glb",
-      count: 1,
-      startPositions: [new THREE.Vector3(0, 0, -3.2)],
-      scale: 1.0,
-      speed: 1.0,
-      forwardFlip: false, // set true if you see backwards walking
-    });
-  } catch (e) {
-    console.error("Bot spawn failed", e);
-    if (UI.diag) UI.diag.textContent += `\nBot spawn failed: ${e?.message || e}`;
-  }
-
-  // ---- Controls ----
-  const keys = new Set();
-  window.addEventListener("keydown", (e) => keys.add(e.code));
-  window.addEventListener("keyup", (e) => keys.delete(e.code));
-
-  let mouseLook = false;
-  let yaw = 0;
-  let pitch = 0;
-
-  function setMouseLook(on) {
-    mouseLook = on;
-    if (UI.btnMouse) UI.btnMouse.textContent = on ? "Disable Mouse Look" : "Enable Mouse Look";
-  }
-
-  UI.btnMouse?.addEventListener("click", async () => {
-    if (!mouseLook) {
-      try {
-        await renderer.domElement.requestPointerLock();
-        setMouseLook(true);
-      } catch (_) {
-        setMouseLook(true);
-      }
-    } else {
-      document.exitPointerLock?.();
-      setMouseLook(false);
+function prepModel(model) {
+  model.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+      if (o.material) o.material.side = THREE.DoubleSide;
+      o.frustumCulled = false;
     }
   });
-
-  document.addEventListener("pointerlockchange", () => {
-    if (!document.pointerLockElement) setMouseLook(false);
-  });
-
-  window.addEventListener("mousemove", (e) => {
-    if (!mouseLook) return;
-    const dx = e.movementX || 0;
-    const dy = e.movementY || 0;
-    yaw -= dx * 0.0022;
-    pitch -= dy * 0.0022;
-    pitch = Math.max(-1.2, Math.min(1.2, pitch));
-  });
-
-  function resetPosition() {
-    camera.position.set(0, 1.7, 6);
-    yaw = 0;
-    pitch = 0;
-  }
-  UI.btnReset?.addEventListener("click", resetPosition);
-
-  let showDiag = true;
-  UI.btnDiag?.addEventListener("click", () => {
-    showDiag = !showDiag;
-    if (UI.diag) UI.diag.style.display = showDiag ? "block" : "none";
-  });
-
-  // ---- Diagnostics / FPS ----
-  let last = performance.now();
-  let frames = 0;
-  let fps = 0;
-
-  const clock = new THREE.Clock();
-
-  function animate() {
-    renderer.setAnimationLoop(() => {
-      const dt = clock.getDelta();
-
-      // movement
-      const moveSpeed = (keys.has("ShiftLeft") || keys.has("ShiftRight")) ? 4.0 : 2.2;
-      const v = moveSpeed * dt;
-
-      const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-      const right = new THREE.Vector3(forward.z, 0, -forward.x);
-
-      if (keys.has("KeyW")) camera.position.addScaledVector(forward, -v);
-      if (keys.has("KeyS")) camera.position.addScaledVector(forward, v);
-      if (keys.has("KeyA")) camera.position.addScaledVector(right, -v);
-      if (keys.has("KeyD")) camera.position.addScaledVector(right, v);
-      if (keys.has("Space")) camera.position.y += v;
-      if (keys.has("KeyC")) camera.position.y -= v;
-
-      // apply look
-      camera.rotation.set(pitch, yaw, 0, "YXZ");
-
-      bots.update(dt);
-
-      renderer.render(scene, camera);
-
-      // fps
-      frames++;
-      const now = performance.now();
-      if (now - last > 500) {
-        fps = Math.round((frames * 1000) / (now - last));
-        frames = 0;
-        last = now;
-      }
-
-      if (UI.diagText && showDiag) {
-        const xr = renderer.xr.isPresenting ? "ON" : "OFF";
-        UI.diagText.textContent =
-          `FPS: ${fps}\n` +
-          `XR: ${xr}\n` +
-          `Cam: x=${camera.position.x.toFixed(2)} y=${camera.position.y.toFixed(2)} z=${camera.position.z.toFixed(2)}\n` +
-          `GLB Display: ./assets/avatars/Character_output.glb\n` +
-          `GLB Bot: ./assets/avatars/Meshy_Merged_Animations.glb\n` +
-          `Tip: If bot walks backwards, set forwardFlip:true in main.js`;
-      }
-
-      // UI has no separate boot element; status text is enough.
-      setStatus("Ready");
-    });
-  }
-
-  animate();
 }
 
-boot();
+// ---- Bot manager ----
+const navTargets = [];
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  navTargets.push(new THREE.Vector3(Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2));
+}
+
+const bots = new BotManager({
+  scene,
+  THREE,
+  GLTFLoader,
+  SkeletonUtils,
+  navTargets,
+  debug: false,
+});
+
+let readyOnce = false;
+function setReadyOnce() {
+  if (readyOnce) return;
+  readyOnce = true;
+  setStatus("Ready");
+}
+
+async function bootAssets() {
+  setStatus("Booting…");
+
+  // Start a timeout message (mobile networks sometimes stall large GLBs)
+  const t = setTimeout(() => {
+    appendDiag("Tip: If stuck on Booting… your mobile network may be stalling the large GLB. Try Wi‑Fi or wait a bit.");
+  }, 4000);
+
+  // Display Male (Character_output.glb)
+  loadGLB("./assets/avatars/Character_output.glb")
+    .then((gltf) => {
+      clearTimeout(t);
+      const m = gltf.scene;
+      prepModel(m);
+      m.position.set(-4, 0.6, 0);
+      m.scale.setScalar(1.0);
+      m.rotation.y = Math.PI / 2;
+      scene.add(m);
+      appendDiag("Loaded display avatar: Character_output.glb");
+      setReadyOnce();
+    })
+    .catch((e) => {
+      clearTimeout(t);
+      console.warn("Display male failed", e);
+      appendDiag("Display male load failed: " + (e?.message || e));
+      setReadyOnce();
+    });
+
+  // Display Female (FemaleAvatar.glb)
+  loadGLB("./assets/avatars/FemaleAvatar.glb")
+    .then((gltf) => {
+      const f = gltf.scene;
+      prepModel(f);
+      f.position.set(-4, 0.6, -3);
+      f.scale.setScalar(1.0);
+      f.rotation.y = Math.PI / 2;
+      scene.add(f);
+      appendDiag("Loaded female avatar: FemaleAvatar.glb");
+      setReadyOnce();
+    })
+    .catch((e) => {
+      console.warn("Display female failed", e);
+      appendDiag("Display female load failed: " + (e?.message || e));
+      setReadyOnce();
+    });
+
+  // Walking bot (Meshy_Merged_Animations.glb)
+  bots
+    .spawnBot({
+      avatarUrl: "./assets/avatars/Meshy_Merged_Animations.glb",
+      position: new THREE.Vector3(0, 0, -3.2),
+      scale: 1.0,
+      speed: 1.0,
+      forwardFlip: false, // set true if animation faces the wrong direction
+    })
+    .then(() => {
+      appendDiag("Loaded NPC bot: Meshy_Merged_Animations.glb");
+      setReadyOnce();
+    })
+    .catch((e) => {
+      console.error("Bot spawn failed", e);
+      appendDiag("Bot spawn failed: " + (e?.message || e));
+      setReadyOnce();
+    });
+}
+
+// ---- Controls ----
+const keys = new Set();
+window.addEventListener("keydown", (e) => keys.add(e.code));
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+
+let mouseLook = false;
+let yaw = 0;
+let pitch = 0;
+
+function setMouseLook(on) {
+  mouseLook = on;
+  if (UI.btnMouse) UI.btnMouse.textContent = on ? "Disable Mouse Look" : "Enable Mouse Look";
+}
+
+UI.btnMouse?.addEventListener("click", async () => {
+  if (!mouseLook) {
+    try {
+      await renderer.domElement.requestPointerLock();
+      setMouseLook(true);
+    } catch (_) {
+      setMouseLook(true);
+    }
+  } else {
+    document.exitPointerLock?.();
+    setMouseLook(false);
+  }
+});
+
+document.addEventListener("pointerlockchange", () => {
+  if (!document.pointerLockElement) setMouseLook(false);
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!mouseLook) return;
+  const dx = e.movementX || 0;
+  const dy = e.movementY || 0;
+  yaw -= dx * 0.0022;
+  pitch -= dy * 0.0022;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+});
+
+function resetPosition() {
+  camera.position.set(0, 1.7, 6);
+  yaw = 0;
+  pitch = 0;
+}
+UI.btnReset?.addEventListener("click", resetPosition);
+
+let showDiag = true;
+UI.btnDiag?.addEventListener("click", () => {
+  showDiag = !showDiag;
+  if (UI.diag) UI.diag.style.display = showDiag ? "block" : "none";
+});
+
+// ---- Diagnostics / FPS ----
+let last = performance.now();
+let frames = 0;
+let fps = 0;
+
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+
+  // movement
+  const moveSpeed = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 4.0 : 2.2;
+  const v = moveSpeed * dt;
+
+  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+  if (keys.has("KeyW")) camera.position.addScaledVector(forward, -v);
+  if (keys.has("KeyS")) camera.position.addScaledVector(forward, v);
+  if (keys.has("KeyA")) camera.position.addScaledVector(right, -v);
+  if (keys.has("KeyD")) camera.position.addScaledVector(right, v);
+  if (keys.has("Space")) camera.position.y += v;
+  if (keys.has("KeyC")) camera.position.y -= v;
+
+  camera.rotation.set(pitch, yaw, 0, "YXZ");
+
+  bots.update();
+
+  renderer.render(scene, camera);
+
+  // fps
+  frames++;
+  const now = performance.now();
+  if (now - last > 500) {
+    fps = Math.round((frames * 1000) / (now - last));
+    frames = 0;
+    last = now;
+  }
+
+  if (UI.diagText && showDiag) {
+    const xr = renderer.xr.isPresenting ? "ON" : "OFF";
+    UI.diagText.textContent =
+      `FPS: ${fps}\n` +
+      `XR: ${xr}\n` +
+      `Cam: x=${camera.position.x.toFixed(2)} y=${camera.position.y.toFixed(2)} z=${camera.position.z.toFixed(2)}\n` +
+      `GLB Male: ./assets/avatars/Character_output.glb\n` +
+      `GLB Female: ./assets/avatars/FemaleAvatar.glb\n` +
+      `GLB Bot: ./assets/avatars/Meshy_Merged_Animations.glb\n` +
+      `Tip: If bot walks backwards, set forwardFlip:true in main.js`;
+  }
+});
+
+bootAssets();
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
