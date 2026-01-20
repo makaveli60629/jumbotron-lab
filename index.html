@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>NPC Bot Test (GitHub Pages Safe)</title>
+  <title>NPC Bot Test v3 (No-Module GitHub Safe)</title>
   <style>
     html, body {
       margin: 0;
@@ -14,6 +14,7 @@
       background: #05060a;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
+    canvas { display:block; }
 
     #overlayDot {
       position: fixed;
@@ -47,10 +48,10 @@
       backdrop-filter: blur(8px);
     }
 
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 
     button {
-      appearance: none;
+      appearance:none;
       border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.08);
       color: rgba(255,255,255,0.95);
@@ -74,7 +75,7 @@
       right: 12px;
       top: 12px;
       z-index: 10;
-      width: min(380px, calc(100vw - 24px));
+      width: min(420px, calc(100vw - 24px));
       display: none;
     }
 
@@ -102,13 +103,380 @@
     <div id="status">Booting…</div>
     <div style="margin-top:8px; font-size:13px; opacity:0.9;">
       Controls: <b>WASD</b> move, <b>Shift</b> run, <b>Space</b> up, <b>C</b> down. Tap “Enable Mouse Look” for FPS-style.
-      <br/>NPC: one avatar is displayed on a pedestal; one bot walks around the table.
-      <br/>If you see a black screen, open DevTools console — this build is GitHub-Pages-safe (CDN imports).
+      <br/>NPC: male avatar pedestal + female avatar pedestal; one animated bot walks around the table.
+      <br/>This build is <b>NO-MODULE</b> to avoid GitHub Pages / mobile module issues.
     </div>
   </div>
 
   <div id="diag" class="panel"><pre id="diagText">Diagnostics…</pre></div>
 
-  <script type="module" src="./js/main.js"></script>
+  <!-- NO MODULES: use CDN UMD scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/webxr/VRButton.js"></script>
+
+  <script>
+  (function(){
+    const UI = {
+      status: document.getElementById('status'),
+      diag: document.getElementById('diag'),
+      diagText: document.getElementById('diagText'),
+      btnMouse: document.getElementById('btnMouse'),
+      btnReset: document.getElementById('btnReset'),
+      btnDiag: document.getElementById('btnDiag'),
+    };
+
+    function setStatus(msg){ UI.status.textContent = msg; }
+    function setDiag(msg){ UI.diagText.textContent = msg; }
+    function appendDiag(msg){ UI.diagText.textContent += "\n" + msg; }
+
+    // Make sure UI buttons work EVEN if 3D fails
+    let diagOn = false;
+    UI.btnDiag.onclick = () => { diagOn = !diagOn; UI.diag.style.display = diagOn ? 'block' : 'none'; };
+
+    // Error visibility
+    window.addEventListener('error', (e)=>{
+      console.error(e);
+      setStatus('❌ JS Error: ' + (e.message || 'Unknown'));
+      appendDiag('[window.error] ' + (e.message || e));
+    });
+    window.addEventListener('unhandledrejection', (e)=>{
+      console.error(e);
+      setStatus('❌ Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+      appendDiag('[unhandledrejection] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+    });
+
+    // Verify Three loaded
+    if (!window.THREE || !THREE.WebGLRenderer) {
+      setStatus('❌ THREE did not load from CDN. (Network blocked?)');
+      setDiag('THREE missing. Check network / adblock / CSP.');
+      return;
+    }
+
+    // --- Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05060a);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.05, 500);
+    camera.position.set(0, 1.7, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // XR button (Quest / WebXR)
+    try {
+      document.body.appendChild(VRButton.createButton(renderer));
+    } catch (err) {
+      appendDiag('VRButton not available on this browser.');
+    }
+
+    // Lights
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x101018, 0.9));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.25);
+    dir.position.set(6, 10, 6);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    scene.add(dir);
+
+    // Floor
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x0b0e16, roughness: 1, metalness: 0 })
+    );
+    floor.rotation.x = -Math.PI/2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Big table
+    const tableGroup = new THREE.Group();
+    const tableTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.2, 2.2, 0.18, 48),
+      new THREE.MeshStandardMaterial({ color: 0x1a6b3a, roughness: 0.85, metalness: 0.05 })
+    );
+    tableTop.position.y = 1.0;
+    tableTop.castShadow = true;
+    tableTop.receiveShadow = true;
+    tableGroup.add(tableTop);
+
+    const tableEdge = new THREE.Mesh(
+      new THREE.TorusGeometry(2.25, 0.12, 16, 64),
+      new THREE.MeshStandardMaterial({ color: 0x2a1b12, roughness: 0.6, metalness: 0.15 })
+    );
+    tableEdge.position.y = 1.05;
+    tableEdge.rotation.x = Math.PI/2;
+    tableEdge.castShadow = true;
+    tableGroup.add(tableEdge);
+
+    for (let i=0;i<4;i++){
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.22, 1.0, 18),
+        new THREE.MeshStandardMaterial({ color: 0x22160f, roughness: 0.8, metalness: 0.1 })
+      );
+      const a = (i/4) * Math.PI * 2;
+      leg.position.set(Math.cos(a)*0.9, 0.5, Math.sin(a)*0.9);
+      leg.castShadow = true;
+      leg.receiveShadow = true;
+      tableGroup.add(leg);
+    }
+    scene.add(tableGroup);
+
+    function makePedestal(x,z){
+      const p = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6,0.7,0.6,24),
+        new THREE.MeshStandardMaterial({ color: 0x202431, roughness: 0.8, metalness: 0.1 })
+      );
+      p.position.set(x,0.3,z);
+      p.castShadow = true;
+      p.receiveShadow = true;
+      scene.add(p);
+
+      const stage = new THREE.Mesh(
+        new THREE.RingGeometry(0.9,1.2,48),
+        new THREE.MeshStandardMaterial({ color: 0x0f1420, roughness: 1, metalness: 0 })
+      );
+      stage.position.set(x,0.01,z);
+      stage.rotation.x = -Math.PI/2;
+      scene.add(stage);
+
+      return p;
+    }
+
+    const pedMale = makePedestal(-4, 0);
+    const pedFemale = makePedestal(-4, -3);
+
+    // --- Basic FPS movement ---
+    let mouseLook = false;
+    let yaw = 0, pitch = 0;
+    const keys = {};
+
+    UI.btnMouse.onclick = async () => {
+      mouseLook = !mouseLook;
+      UI.btnMouse.textContent = mouseLook ? 'Mouse Look: ON' : 'Enable Mouse Look';
+      if (mouseLook) {
+        try { await renderer.domElement.requestPointerLock(); } catch(e){}
+      } else {
+        try { document.exitPointerLock(); } catch(e){}
+      }
+    };
+
+    UI.btnReset.onclick = () => {
+      camera.position.set(0, 1.7, 6);
+      yaw = 0; pitch = 0;
+    };
+
+    window.addEventListener('keydown', (e)=>{ keys[e.code] = true; });
+    window.addEventListener('keyup', (e)=>{ keys[e.code] = false; });
+
+    window.addEventListener('mousemove', (e)=>{
+      if (!mouseLook || document.pointerLockElement !== renderer.domElement) return;
+      yaw -= e.movementX * 0.002;
+      pitch -= e.movementY * 0.002;
+      const lim = Math.PI/2 - 0.05;
+      pitch = Math.max(-lim, Math.min(lim, pitch));
+    });
+
+    function updateCamera(dt){
+      // Apply rotation
+      camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+      // Movement in camera yaw plane
+      const forward = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,yaw,0));
+      const right = new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0,yaw,0));
+
+      let speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? 4.0 : 2.2;
+      let vel = new THREE.Vector3();
+      if (keys['KeyW']) vel.add(forward);
+      if (keys['KeyS']) vel.sub(forward);
+      if (keys['KeyA']) vel.sub(right);
+      if (keys['KeyD']) vel.add(right);
+      if (keys['Space']) vel.y += 1;
+      if (keys['KeyC']) vel.y -= 1;
+
+      if (vel.lengthSq() > 0) {
+        vel.normalize().multiplyScalar(speed * dt);
+        camera.position.add(vel);
+      }
+    }
+
+    // --- GLB Loading ---
+    const loader = new THREE.GLTFLoader();
+
+    function prepModel(obj){
+      obj.traverse((o)=>{
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          o.frustumCulled = false;
+          if (o.material) o.material.side = THREE.DoubleSide;
+        }
+      });
+    }
+
+    function fitOnPedestal(model, pedestal, scaleTarget){
+      // center, scale
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const s = (scaleTarget || 1.6) / maxDim;
+      model.scale.setScalar(s);
+
+      // recompute
+      const box2 = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      box2.getCenter(center);
+      model.position.sub(center);
+
+      // put on top
+      model.position.y += 0.6; // pedestal height top
+      model.position.x += pedestal.position.x;
+      model.position.z += pedestal.position.z;
+    }
+
+    let bot = null;
+    let botMixer = null;
+    let botAction = null;
+
+    const navTargets = [];
+    for (let i=0;i<10;i++){
+      const a = (i/10) * Math.PI*2;
+      navTargets.push(new THREE.Vector3(Math.cos(a)*3.2, 0, Math.sin(a)*3.2));
+    }
+    let botTargetIndex = 0;
+
+    function spawnWalkingBot(gltf){
+      bot = gltf.scene;
+      prepModel(bot);
+
+      // scale bot
+      const box = new THREE.Box3().setFromObject(bot);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const s = 1.7 / maxDim;
+      bot.scale.setScalar(s);
+
+      bot.position.set(0, 0, -2);
+      scene.add(bot);
+
+      if (gltf.animations && gltf.animations.length) {
+        botMixer = new THREE.AnimationMixer(bot);
+        const clip = gltf.animations.find(c => /walk|run/i.test(c.name)) || gltf.animations[0];
+        botAction = botMixer.clipAction(clip);
+        botAction.play();
+      }
+
+      appendDiag('Bot spawned. Animations: ' + (gltf.animations ? gltf.animations.length : 0));
+    }
+
+    function updateBot(dt){
+      if (!bot) return;
+      if (botMixer) botMixer.update(dt);
+
+      const target = navTargets[botTargetIndex];
+      const dir = new THREE.Vector3().subVectors(target, bot.position);
+      dir.y = 0;
+      const dist = dir.length();
+      if (dist < 0.25) {
+        botTargetIndex = (botTargetIndex + 1) % navTargets.length;
+        return;
+      }
+      dir.normalize();
+
+      const speed = 0.85;
+      bot.position.addScaledVector(dir, speed * dt);
+
+      // face movement direction
+      const yaw = Math.atan2(dir.x, dir.z);
+      bot.rotation.y = yaw;
+    }
+
+    // Load pedestal avatars (async)
+    setStatus('Loading avatars…');
+    setDiag('THREE ' + THREE.REVISION + '\nLoading GLBs…');
+
+    loader.load(
+      './assets/avatars/Character_output.glb',
+      (gltf)=>{
+        const m = gltf.scene;
+        prepModel(m);
+        fitOnPedestal(m, pedMale, 1.8);
+        scene.add(m);
+        appendDiag('Male avatar loaded: Character_output.glb');
+      },
+      (p)=>{},
+      (err)=>{ appendDiag('❌ Male avatar failed: ' + (err && err.message ? err.message : err)); }
+    );
+
+    loader.load(
+      './assets/avatars/FemaleAvatar.glb',
+      (gltf)=>{
+        const m = gltf.scene;
+        prepModel(m);
+        fitOnPedestal(m, pedFemale, 1.8);
+        scene.add(m);
+        appendDiag('Female avatar loaded: FemaleAvatar.glb');
+      },
+      (p)=>{},
+      (err)=>{ appendDiag('❌ Female avatar failed: ' + (err && err.message ? err.message : err)); }
+    );
+
+    loader.load(
+      './assets/avatars/Meshy_Merged_Animations.glb',
+      (gltf)=>{
+        spawnWalkingBot(gltf);
+        appendDiag('Walking bot loaded: Meshy_Merged_Animations.glb');
+      },
+      (p)=>{},
+      (err)=>{ appendDiag('❌ Walking bot failed: ' + (err && err.message ? err.message : err)); }
+    );
+
+    // Resize
+    window.addEventListener('resize', ()=>{
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // FPS counter
+    let lastT = performance.now();
+    let fps = 0;
+    function tickFps(now){
+      const dt = (now - lastT) / 1000;
+      lastT = now;
+      fps = 0.9*fps + 0.1*(1/Math.max(dt,0.0001));
+      return dt;
+    }
+
+    // Animate
+    setStatus('Ready (loading models in background)…');
+
+    function animate(now){
+      const dt = tickFps(now);
+      updateCamera(dt);
+      updateBot(dt);
+
+      if (diagOn) {
+        UI.diagText.textContent =
+          'THREE ' + THREE.REVISION +
+          '\nFPS: ' + fps.toFixed(1) +
+          '\nCam: ' + camera.position.x.toFixed(2) + ', ' + camera.position.y.toFixed(2) + ', ' + camera.position.z.toFixed(2) +
+          '\nXR: ' + (renderer.xr && renderer.xr.isPresenting ? 'Presenting' : 'Idle') +
+          '\nModels: ' + (bot ? 'bot ok' : 'bot …') + ' | male … | female …' +
+          '\n(If a model fails, see console/network in DevTools)';
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    renderer.setAnimationLoop(animate);
+
+  })();
+  </script>
 </body>
 </html>
