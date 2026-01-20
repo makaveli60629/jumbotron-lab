@@ -1,369 +1,236 @@
-// NPC Bot Test - GitHub Pages Safe (v2)
-// Fix: render loop starts immediately; GLBs load asynchronously so the scene never hangs at "Booting…".
+import * as THREE from "three";
+import { VRButton } from "three/examples/jsm/webxr/VRButton.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
-import { GLTFLoader } from "https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js";
-import { SkeletonUtils } from "https://unpkg.com/three@0.158.0/examples/jsm/utils/SkeletonUtils.js";
-import { VRButton } from "https://unpkg.com/three@0.158.0/examples/jsm/webxr/VRButton.js";
+import { InputRouter } from "./input_router.js";
+import { AvatarWalkController } from "./avatar_walk_controller.js";
+import { XRHandsController } from "./xr_hands_controller.js";
+import { CardInteractions } from "./card_interactions.js";
+import { SeatingController } from "./seating_controller.js";
+import { DevWorld } from "./world.js";
+import { DiagPanel } from "./diag_panel.js";
 
-import { BotManager } from "./bots.js";
-
-const UI = {
-  status: document.getElementById("status"),
-  diag: document.getElementById("diag"),
-  diagText: document.getElementById("diagText"),
-  btnMouse: document.getElementById("btnMouse"),
-  btnReset: document.getElementById("btnReset"),
-  btnDiag: document.getElementById("btnDiag"),
-};
-
-function setStatus(msg) {
-  if (UI.status) UI.status.textContent = msg;
-}
-
-function appendDiag(msg) {
-  if (!UI.diagText) return;
-  UI.diagText.textContent = (UI.diagText.textContent || "") + "\n" + msg;
-}
-
-// ---- Catch errors so you ALWAYS see a reason ----
-window.addEventListener("error", (e) => {
-  console.error(e?.error || e);
-  setStatus("❌ Error: " + (e.message || "Unknown"));
-  appendDiag(`[window.error] ${e.message || e}`);
-});
-window.addEventListener("unhandledrejection", (e) => {
-  console.error(e?.reason || e);
-  setStatus("❌ Promise Error: " + (e.reason?.message || String(e.reason)));
-  appendDiag(`[unhandledrejection] ${e.reason?.message || e.reason}`);
-});
-
-// ---- Renderer / Scene ----
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05060a);
-
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 500);
-camera.position.set(0, 1.7, 6);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.shadowMap.enabled = true;
 renderer.xr.enabled = true;
-document.body.appendChild(renderer.domElement);
 
-// XR button
-try {
-  document.body.appendChild(VRButton.createButton(renderer));
-} catch (e) {
-  console.warn("VRButton error", e);
-  appendDiag("VRButton not available on this browser.");
-}
+document.body.appendChild(VRButton.createButton(renderer));
 
-// Lights
-scene.add(new THREE.HemisphereLight(0xffffff, 0x101018, 0.9));
-const dir = new THREE.DirectionalLight(0xffffff, 1.25);
-dir.position.set(6, 10, 6);
-dir.castShadow = true;
-dir.shadow.mapSize.set(1024, 1024);
-scene.add(dir);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07070c);
 
-// Floor
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(200, 200),
-  new THREE.MeshStandardMaterial({ color: 0x0b0e16, roughness: 1, metalness: 0 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
-
-// Big centerpiece table
-const tableGroup = new THREE.Group();
-const tableTop = new THREE.Mesh(
-  new THREE.CylinderGeometry(2.2, 2.2, 0.18, 48),
-  new THREE.MeshStandardMaterial({ color: 0x1a6b3a, roughness: 0.85, metalness: 0.05 })
-);
-tableTop.position.y = 1.0;
-tableTop.castShadow = true;
-tableTop.receiveShadow = true;
-tableGroup.add(tableTop);
-
-const tableEdge = new THREE.Mesh(
-  new THREE.TorusGeometry(2.25, 0.12, 16, 64),
-  new THREE.MeshStandardMaterial({ color: 0x2a1b12, roughness: 0.6, metalness: 0.15 })
-);
-tableEdge.position.y = 1.05;
-tableEdge.rotation.x = Math.PI / 2;
-tableEdge.castShadow = true;
-tableGroup.add(tableEdge);
-
-for (let i = 0; i < 4; i++) {
-  const leg = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16, 0.22, 1.0, 18),
-    new THREE.MeshStandardMaterial({ color: 0x22160f, roughness: 0.8, metalness: 0.1 })
-  );
-  const a = (i / 4) * Math.PI * 2;
-  leg.position.set(Math.cos(a) * 0.9, 0.5, Math.sin(a) * 0.9);
-  leg.castShadow = true;
-  leg.receiveShadow = true;
-  tableGroup.add(leg);
-}
-scene.add(tableGroup);
-
-// Pedestals (male + female)
-function makePedestal(x, z) {
-  const pedestal = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.6, 0.7, 0.6, 24),
-    new THREE.MeshStandardMaterial({ color: 0x202431, roughness: 0.8, metalness: 0.1 })
-  );
-  pedestal.position.set(x, 0.3, z);
-  pedestal.castShadow = true;
-  pedestal.receiveShadow = true;
-  scene.add(pedestal);
-
-  const stage = new THREE.Mesh(
-    new THREE.RingGeometry(0.9, 1.2, 48),
-    new THREE.MeshStandardMaterial({ color: 0x0f1420, roughness: 1, metalness: 0 })
-  );
-  stage.position.set(x, 0.01, z);
-  stage.rotation.x = -Math.PI / 2;
-  scene.add(stage);
-
-  return pedestal;
-}
-
-makePedestal(-4, 0);
-makePedestal(-4, -3);
-
-// ---- Load GLBs asynchronously (do not block rendering) ----
-const loader = new GLTFLoader();
-function loadGLB(url) {
-  return new Promise((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => resolve(gltf),
-      (prog) => {
-        if (prog?.total) {
-          const pct = Math.round((prog.loaded / prog.total) * 100);
-          setStatus(`Loading… ${pct}%`);
-        }
-      },
-      (err) => reject(err)
-    );
-  });
-}
-
-function prepModel(model) {
-  model.traverse((o) => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-      if (o.material) o.material.side = THREE.DoubleSide;
-      o.frustumCulled = false;
-    }
-  });
-}
-
-// ---- Bot manager ----
-const navTargets = [];
-for (let i = 0; i < 8; i++) {
-  const a = (i / 8) * Math.PI * 2;
-  navTargets.push(new THREE.Vector3(Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2));
-}
-
-const bots = new BotManager({
-  scene,
-  THREE,
-  GLTFLoader,
-  SkeletonUtils,
-  navTargets,
-  debug: false,
-});
-
-let readyOnce = false;
-function setReadyOnce() {
-  if (readyOnce) return;
-  readyOnce = true;
-  setStatus("Ready");
-}
-
-async function bootAssets() {
-  setStatus("Booting…");
-
-  // Start a timeout message (mobile networks sometimes stall large GLBs)
-  const t = setTimeout(() => {
-    appendDiag("Tip: If stuck on Booting… your mobile network may be stalling the large GLB. Try Wi‑Fi or wait a bit.");
-  }, 4000);
-
-  // Display Male (Character_output.glb)
-  loadGLB("./assets/avatars/Character_output.glb")
-    .then((gltf) => {
-      clearTimeout(t);
-      const m = gltf.scene;
-      prepModel(m);
-      m.position.set(-4, 0.6, 0);
-      m.scale.setScalar(1.0);
-      m.rotation.y = Math.PI / 2;
-      scene.add(m);
-      appendDiag("Loaded display avatar: Character_output.glb");
-      setReadyOnce();
-    })
-    .catch((e) => {
-      clearTimeout(t);
-      console.warn("Display male failed", e);
-      appendDiag("Display male load failed: " + (e?.message || e));
-      setReadyOnce();
-    });
-
-  // Display Female (FemaleAvatar.glb)
-  loadGLB("./assets/avatars/FemaleAvatar.glb")
-    .then((gltf) => {
-      const f = gltf.scene;
-      prepModel(f);
-      f.position.set(-4, 0.6, -3);
-      f.scale.setScalar(1.0);
-      f.rotation.y = Math.PI / 2;
-      scene.add(f);
-      appendDiag("Loaded female avatar: FemaleAvatar.glb");
-      setReadyOnce();
-    })
-    .catch((e) => {
-      console.warn("Display female failed", e);
-      appendDiag("Display female load failed: " + (e?.message || e));
-      setReadyOnce();
-    });
-
-  // Walking bot (Meshy_Merged_Animations.glb)
-  bots
-    .spawnBot({
-      avatarUrl: "./assets/avatars/Meshy_Merged_Animations.glb",
-      position: new THREE.Vector3(0, 0, -3.2),
-      scale: 1.0,
-      speed: 1.0,
-      forwardFlip: false, // set true if animation faces the wrong direction
-    })
-    .then(() => {
-      appendDiag("Loaded NPC bot: Meshy_Merged_Animations.glb");
-      setReadyOnce();
-    })
-    .catch((e) => {
-      console.error("Bot spawn failed", e);
-      appendDiag("Bot spawn failed: " + (e?.message || e));
-      setReadyOnce();
-    });
-}
-
-// ---- Controls ----
-const keys = new Set();
-window.addEventListener("keydown", (e) => keys.add(e.code));
-window.addEventListener("keyup", (e) => keys.delete(e.code));
-
-let mouseLook = false;
-let yaw = 0;
-let pitch = 0;
-
-function setMouseLook(on) {
-  mouseLook = on;
-  if (UI.btnMouse) UI.btnMouse.textContent = on ? "Disable Mouse Look" : "Enable Mouse Look";
-}
-
-UI.btnMouse?.addEventListener("click", async () => {
-  if (!mouseLook) {
-    try {
-      await renderer.domElement.requestPointerLock();
-      setMouseLook(true);
-    } catch (_) {
-      setMouseLook(true);
-    }
-  } else {
-    document.exitPointerLock?.();
-    setMouseLook(false);
-  }
-});
-
-document.addEventListener("pointerlockchange", () => {
-  if (!document.pointerLockElement) setMouseLook(false);
-});
-
-window.addEventListener("mousemove", (e) => {
-  if (!mouseLook) return;
-  const dx = e.movementX || 0;
-  const dy = e.movementY || 0;
-  yaw -= dx * 0.0022;
-  pitch -= dy * 0.0022;
-  pitch = Math.max(-1.2, Math.min(1.2, pitch));
-});
-
-function resetPosition() {
-  camera.position.set(0, 1.7, 6);
-  yaw = 0;
-  pitch = 0;
-}
-UI.btnReset?.addEventListener("click", resetPosition);
-
-let showDiag = true;
-UI.btnDiag?.addEventListener("click", () => {
-  showDiag = !showDiag;
-  if (UI.diag) UI.diag.style.display = showDiag ? "block" : "none";
-});
-
-// ---- Diagnostics / FPS ----
-let last = performance.now();
-let frames = 0;
-let fps = 0;
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 250);
+camera.position.set(0, 1.6, 3.2);
 
 const clock = new THREE.Clock();
 
-renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
+// Player root (authoritative mover)
+const playerRoot = new THREE.Group();
+scene.add(playerRoot);
 
-  // movement
-  const moveSpeed = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 4.0 : 2.2;
-  const v = moveSpeed * dt;
+// Build dev world
+const world = new DevWorld({ scene });
+world.buildBase();
 
-  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+// --- Poker Table (solid + pretty) ---
+const table = world.createPokerTable({ x: 0, z: 0.2, yaw: 0, scale: 1.0 });
 
-  if (keys.has("KeyW")) camera.position.addScaledVector(forward, -v);
-  if (keys.has("KeyS")) camera.position.addScaledVector(forward, v);
-  if (keys.has("KeyA")) camera.position.addScaledVector(right, -v);
-  if (keys.has("KeyD")) camera.position.addScaledVector(right, v);
-  if (keys.has("Space")) camera.position.y += v;
-  if (keys.has("KeyC")) camera.position.y -= v;
+// Pedestals for showroom
+const ped1 = world.createPedestal({ x: -3.2, z: -1.2, label: "Display Bot" });
+const ped2 = world.createPedestal({ x:  3.2, z: -1.2, label: "Avatar Display" });
 
-  camera.rotation.set(pitch, yaw, 0, "YXZ");
-
-  bots.update();
-
-  renderer.render(scene, camera);
-
-  // fps
-  frames++;
-  const now = performance.now();
-  if (now - last > 500) {
-    fps = Math.round((frames * 1000) / (now - last));
-    frames = 0;
-    last = now;
-  }
-
-  if (UI.diagText && showDiag) {
-    const xr = renderer.xr.isPresenting ? "ON" : "OFF";
-    UI.diagText.textContent =
-      `FPS: ${fps}\n` +
-      `XR: ${xr}\n` +
-      `Cam: x=${camera.position.x.toFixed(2)} y=${camera.position.y.toFixed(2)} z=${camera.position.z.toFixed(2)}\n` +
-      `GLB Male: ./assets/avatars/Character_output.glb\n` +
-      `GLB Female: ./assets/avatars/FemaleAvatar.glb\n` +
-      `GLB Bot: ./assets/avatars/Meshy_Merged_Animations.glb\n` +
-      `Tip: If bot walks backwards, set forwardFlip:true in main.js`;
-  }
+// Diagnostics HUD
+const diag = new DiagPanel();
+document.getElementById("toggleDiag").addEventListener("click", () => {
+  diag.setEnabled(!diag.enabled);
 });
 
-bootAssets();
+// Input
+const input = new InputRouter({ renderer, camera });
 
+// Avatar locomotion (animated avatar)
+// IMPORTANT: This now avoids combat clips (fight/punch/etc). If your GLB names are weird, we can override names in clipOverrides.
+const avatarPath = "./assets/avatars/Meshy_Merged_Animations.glb";
+const avatar = new AvatarWalkController({
+  scene,
+  playerRoot,
+  camera,
+  glbUrl: avatarPath,
+  faceFixYawRad: Math.PI, // set 0 if not backwards
+  clipOverrides: { idle: null, walk: null, run: null }
+});
+
+// Hands (WebXR)
+const hands = new XRHandsController({ renderer, playerRoot });
+
+// Cards (demo card + play zones on the poker table)
+const cards = new CardInteractions({ scene, camera, playerRoot, handsCtrl: hands });
+
+const zoneMat = new THREE.MeshStandardMaterial({ color: 0x14142a, roughness: 0.95 });
+const zone1 = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.36), zoneMat);
+zone1.position.set(-0.28, 0.86, 0.0);
+zone1.userData.zoneId = "table_slot_1";
+scene.add(zone1);
+cards.registerPlayZone(zone1, "table_slot_1");
+
+const zone2 = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.36), zoneMat);
+zone2.position.set(0.28, 0.86, 0.0);
+zone2.userData.zoneId = "discard";
+scene.add(zone2);
+cards.registerPlayZone(zone2, "discard");
+
+const cardMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
+const card1 = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.26), cardMat);
+card1.rotation.x = -Math.PI/2;
+card1.position.set(0, 0.87, -0.22);
+scene.add(card1);
+cards.registerCard(card1, "AS");
+
+// Seating controller (for chairs; we’ll also use it for table seats if you want later)
+const seating = new SeatingController({ scene, camera, playerRoot, avatarCtrl: avatar });
+
+// --- Place 2 dev chairs near table (for testing) ---
+const chair1 = world.createChair({ x: -1.0, z: 2.5, yaw: Math.PI });
+const chair2 = world.createChair({ x:  1.0, z: 2.5, yaw: Math.PI });
+seating.registerChair(chair1);
+seating.registerChair(chair2);
+
+// --- BOT: seated at poker table (static pose for now) ---
+const gltfLoader = new GLTFLoader();
+let seatedBotMixer = null;
+let seatedBot = null;
+
+async function spawnSeatedBot() {
+  try {
+    const gltf = await gltfLoader.loadAsync(avatarPath);
+    seatedBot = gltf.scene;
+    // Pick a "non-combat idle" if available
+    if (gltf.animations && gltf.animations.length) {
+      seatedBotMixer = new THREE.AnimationMixer(seatedBot);
+      // Use same reject list and prefer idle
+      const REJECT = ["fight","fighting","punch","box","boxing","kick","attack","combat","uppercut","jab","guard","block","stance"];
+      const prefer = ["idle","breath","relax"];
+      let best = null, bestScore = -1;
+      for (const clip of gltf.animations) {
+        const n = (clip.name || "").toLowerCase();
+        if (!n) continue;
+        if (REJECT.some(w => n.includes(w))) continue;
+        let score = 0; for (const w of prefer) if (n.includes(w)) score++;
+        if (score > bestScore && score > 0) { bestScore = score; best = clip; }
+      }
+      if (!best) best = gltf.animations.find(c => !REJECT.some(w => (c.name||"").toLowerCase().includes(w))) || gltf.animations[0];
+      if (best) seatedBotMixer.clipAction(best).play();
+    }
+
+    // Seat position: use table seat anchor #1 (front)
+    const seat0 = table.userData.seats?.[0];
+    const hip = seat0?.getObjectByName("SeatAnchor");
+    if (hip) {
+      hip.add(seatedBot);
+      seatedBot.position.set(0, 0, 0);
+      seatedBot.rotation.set(0, 0, 0);
+      seatedBot.scale.setScalar(1.0);
+      // Slight forward/back tweak so it's not inside the backrest
+      seatedBot.position.z -= 0.05;
+    } else {
+      // fallback: place near chair
+      seatedBot.position.set(-0.7, 0, 0.9);
+      scene.add(seatedBot);
+    }
+  } catch (e) {
+    console.warn("Seated bot failed:", e);
+  }
+}
+
+// --- BOT: display on pedestal ---
+async function spawnDisplayBot() {
+  const anchor = ped1.getObjectByName("PedestalAnchor");
+  if (!anchor) return;
+  try {
+    const gltf = await gltfLoader.loadAsync("./assets/avatars/free_pack_male_base_mesh.glb");
+    const bot = gltf.scene;
+    bot.scale.setScalar(1.0);
+    bot.rotation.y = Math.PI;
+    anchor.add(bot);
+  } catch (e) {
+    console.warn("Display bot load failed:", e);
+  }
+}
+
+// --- Display a second avatar on pedestal (female base mesh) ---
+async function spawnSecondDisplay() {
+  const anchor = ped2.getObjectByName("PedestalAnchor");
+  if (!anchor) return;
+  try {
+    const gltf = await gltfLoader.loadAsync("./assets/avatars/free_pack_female_base_mesh.glb");
+    const av = gltf.scene;
+    av.scale.setScalar(1.0);
+    av.rotation.y = Math.PI;
+    anchor.add(av);
+  } catch (e) {
+    console.warn("Second display load failed:", e);
+  }
+}
+
+spawnSeatedBot();
+spawnDisplayBot();
+spawnSecondDisplay();
+
+// Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function gatherDiagLines() {
+  const session = renderer.xr.getSession();
+  const xr = session ? "XR: ON" : "XR: OFF";
+  const pos = playerRoot.position;
+  const vel = avatar.velocity ? `${avatar.velocity.x.toFixed(2)},${avatar.velocity.z.toFixed(2)}` : "n/a";
+  return [
+    `Admin Dev World v2 (Poker Table + Bots)`,
+    xr,
+    `FPS: ${diag.fps}`,
+    `PlayerRoot: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`,
+    `Velocity XZ: (${vel})`,
+    `Seated: ${seating.seated} | Locked: ${seating.movementLocked}`,
+    `Controls: WASD move | Shift run | E grab | Q wave | C sit | V stand`,
+    `Note: locomotion auto-avoids combat clips. If you still see "fighting stance", tell me the clip names and I'll lock exact overrides.`
+  ];
+}
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  diag.tick();
+
+  input.update();
+
+  // Seat controls
+  if (input.sit) seating.trySit();
+  if (input.stand) seating.stand();
+
+  if (!seating.movementLocked) {
+    avatar.setMoveInput(input.move.x, input.move.y);
+    avatar.setRunHeld(input.run);
+  } else {
+    avatar.setMoveInput(0, 0);
+    avatar.setRunHeld(false);
+  }
+
+  avatar.update(dt);
+  hands.update(dt);
+
+  if (seatedBotMixer) seatedBotMixer.update(dt);
+
+  if (input.wave) hands.startWave(1.2);
+  if (input.grab) cards.grabRightHand();
+  if (input.release) cards.releaseHeld();
+
+  seating.update(dt);
+
+  diag.render(gatherDiagLines());
+  renderer.render(scene, camera);
 });
