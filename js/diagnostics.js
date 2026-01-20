@@ -1,71 +1,52 @@
-export function createDiagnostics(panelEl) {
-  const state = {
-    enabled: true,
-    lastT: performance.now(),
-    frames: 0,
-    fps: 0,
-    warnings: [],
-    lastError: null,
-  };
+AFRAME.registerComponent('diagnostics-overlay', {
+  init: function () {
+    this.diag = document.getElementById('diag');
+    this.rig = document.getElementById('rig');
+    this._fpsAcc = 0; this._fpsN = 0; this._fps = 0;
+    if (this.diag) this.diag.textContent = 'READY…';
+  },
+  tick: function (t, dt) {
+    if (!this.diag || !dt) return;
+    const fps = 1000 / dt;
+    this._fpsAcc += fps; this._fpsN++;
+    if (this._fpsN >= 12) { this._fps = this._fpsAcc / this._fpsN; this._fpsAcc=0; this._fpsN=0; }
 
-  function logWarn(msg) {
-    state.warnings.push({ t: new Date().toISOString(), msg });
-    if (state.warnings.length > 6) state.warnings.shift();
-  }
+    const scene = this.el.sceneEl;
+    const mode = scene.is('vr-mode') ? 'VR' : 'FLAT';
+    const joy = window.__JOY_STATE__ || {x:0,y:0,active:false};
+    const pos = this.rig ? this.rig.object3D.position : {x:0,z:0};
 
-  window.addEventListener('error', (e) => {
-    const msg = e?.message || String(e);
-    state.lastError = msg;
-    logWarn(`ERROR: ${msg}`);
-  });
-  window.addEventListener('unhandledrejection', (e) => {
-    const msg = e?.reason?.message || String(e?.reason || e);
-    state.lastError = msg;
-    logWarn(`PROMISE: ${msg}`);
-  });
+    const hasJoy = !!AFRAME.components['android-joystick-move'];
+    const hasCol = !!AFRAME.components['world-collisions'];
+    const hasBotW = !!AFRAME.components['bot-walker'];
+    const hasBotS = !!AFRAME.components['bot-seated'];
 
-  function update({ camera, renderer, extraLines = [] }) {
-    if (!state.enabled) return;
-
-    state.frames += 1;
-    const now = performance.now();
-    const dt = now - state.lastT;
-    if (dt > 500) {
-      state.fps = Math.round((state.frames * 1000) / dt);
-      state.frames = 0;
-      state.lastT = now;
+    const animLines = [];
+    const animDb = window.__ANIM_DIAG__ || {};
+    for (const k of Object.keys(animDb)) {
+      const a = animDb[k];
+      animLines.push(`${k}: active="${a.active||''}"  idle="${a.idle||''}"  walk="${a.walk||''}"  run="${a.run||''}"`);
+      if (a.names && a.names.length) {
+        const short = a.names.slice(0, 10).join(', ') + (a.names.length > 10 ? ' …' : '');
+        animLines.push(`   clips: ${short}`);
+      }
     }
+    const animText = animLines.length ? animLines.join('\n') : '(waiting for model-loaded)';
 
-    const pos = camera?.position;
-    const xr = renderer?.xr;
-    const isXR = xr?.isPresenting ? 'YES' : 'no';
+    this.diag.textContent =
+`Scarlett Lobby v3.1 (Casino Realistic)
+FPS: ${this._fps.toFixed(1)}   Mode: ${mode}
+Rig: x=${pos.x.toFixed(2)} z=${pos.z.toFixed(2)}
+Joy: x=${joy.x.toFixed(2)} y=${joy.y.toFixed(2)} ${joy.active ? '(touch)' : ''}
+VR Buttons: grab=${!!window.__BTN_GRAB__} wave=${!!window.__BTN_WAVE__}
 
-    const lines = [];
-    lines.push(`FPS: ${state.fps}`);
-    if (pos) lines.push(`Camera: x=${pos.x.toFixed(2)} y=${pos.y.toFixed(2)} z=${pos.z.toFixed(2)}`);
-    lines.push(`WebXR presenting: ${isXR}`);
-    lines.push('');
+Modules:
+- android-joystick-move: ${hasJoy ? 'OK' : 'MISSING'}
+- world-collisions:     ${hasCol ? 'OK' : 'MISSING'}
+- bot-walker:           ${hasBotW ? 'OK' : 'MISSING'}
+- bot-seated:           ${hasBotS ? 'OK' : 'MISSING'}
 
-    for (const ln of extraLines) lines.push(ln);
-
-    if (state.warnings.length) {
-      lines.push('');
-      lines.push('Recent warnings:');
-      for (const w of state.warnings) lines.push(`- ${w.t.split('T')[1].split('.')[0]}  ${w.msg}`);
-    }
-
-    if (state.lastError) {
-      lines.push('');
-      lines.push(`Last error: ${state.lastError}`);
-    }
-
-    panelEl.textContent = lines.join('\n');
+Animation:
+${animText}`;
   }
-
-  function setEnabled(v) {
-    state.enabled = !!v;
-    panelEl.style.display = state.enabled ? 'block' : 'none';
-  }
-
-  return { update, logWarn, setEnabled, state };
-}
+});
