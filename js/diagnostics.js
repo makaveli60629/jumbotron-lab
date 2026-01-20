@@ -1,34 +1,71 @@
-export function createDiagnostics(el){
-  const state = { visible:true, map:new Map(), fps:0, _acc:0, _frames:0 };
+export function createDiagnostics(panelEl) {
+  const state = {
+    enabled: true,
+    lastT: performance.now(),
+    frames: 0,
+    fps: 0,
+    warnings: [],
+    lastError: null,
+  };
 
-  function set(k,v){ state.map.set(k,v); }
-  function toggle(){ state.visible = !state.visible; el.style.display = state.visible ? 'block' : 'none'; }
-
-  function tick(dt, renderer, rig){
-    state._acc += dt; state._frames += 1;
-    if (state._acc >= 0.5){
-      state.fps = Math.round(state._frames / state._acc);
-      state._acc = 0; state._frames = 0;
-    }
-    set('fps', state.fps);
-    set('xr', renderer.xr?.isPresenting ? 'presenting' : 'ready');
-    if (rig?.root){
-      const p = rig.root.position;
-      set('pos', `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
-      set('yaw', `${rig.state.yaw.toFixed(2)}`);
-    }
-    render();
+  function logWarn(msg) {
+    state.warnings.push({ t: new Date().toISOString(), msg });
+    if (state.warnings.length > 6) state.warnings.shift();
   }
 
-  function render(){
-    if (!state.visible) return;
-    const rows = [];
-    for (const [k,v] of state.map.entries()){
-      rows.push(`<div><b>${esc(k)}</b>: ${esc(String(v))}</div>`);
+  window.addEventListener('error', (e) => {
+    const msg = e?.message || String(e);
+    state.lastError = msg;
+    logWarn(`ERROR: ${msg}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = e?.reason?.message || String(e?.reason || e);
+    state.lastError = msg;
+    logWarn(`PROMISE: ${msg}`);
+  });
+
+  function update({ camera, renderer, extraLines = [] }) {
+    if (!state.enabled) return;
+
+    state.frames += 1;
+    const now = performance.now();
+    const dt = now - state.lastT;
+    if (dt > 500) {
+      state.fps = Math.round((state.frames * 1000) / dt);
+      state.frames = 0;
+      state.lastT = now;
     }
-    el.innerHTML = rows.join('');
+
+    const pos = camera?.position;
+    const xr = renderer?.xr;
+    const isXR = xr?.isPresenting ? 'YES' : 'no';
+
+    const lines = [];
+    lines.push(`FPS: ${state.fps}`);
+    if (pos) lines.push(`Camera: x=${pos.x.toFixed(2)} y=${pos.y.toFixed(2)} z=${pos.z.toFixed(2)}`);
+    lines.push(`WebXR presenting: ${isXR}`);
+    lines.push('');
+
+    for (const ln of extraLines) lines.push(ln);
+
+    if (state.warnings.length) {
+      lines.push('');
+      lines.push('Recent warnings:');
+      for (const w of state.warnings) lines.push(`- ${w.t.split('T')[1].split('.')[0]}  ${w.msg}`);
+    }
+
+    if (state.lastError) {
+      lines.push('');
+      lines.push(`Last error: ${state.lastError}`);
+    }
+
+    panelEl.textContent = lines.join('\n');
   }
 
-  return { set, tick, toggle };
+  function setEnabled(v) {
+    state.enabled = !!v;
+    panelEl.style.display = state.enabled ? 'block' : 'none';
+  }
+
+  return { update, logWarn, setEnabled, state };
 }
-function esc(s){ return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
