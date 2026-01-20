@@ -1,5 +1,3 @@
-// safe_modules.js - guarded dynamic imports (so a missing module doesn't break the whole build)
-
 export async function safeLoadModules({ safety, diag, toast, modules, context }){
   for (const m of modules){
     try{
@@ -15,7 +13,7 @@ export async function safeLoadModules({ safety, diag, toast, modules, context })
       console.warn('Module load error', m.name, e);
       diag?.set(`mod:${m.name}`, `ERROR`);
       if (safety?.enabled){
-        toast?.(`Module "${m.name}" failed to load. Safe mode kept app running.`);
+        toast?.(`Module "${m.name}" failed. Safe mode kept app running.`);
       } else {
         throw e;
       }
