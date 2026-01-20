@@ -2,480 +2,362 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>NPC Bot Test v3 (No-Module GitHub Safe)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>NPC Bot Test (No-Module)</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #05060a;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    #hud{
+      position:fixed;left:14px;top:14px;z-index:10;max-width:92vw;
+      background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
+      border:1px solid rgba(255,255,255,.12);border-radius:16px;
+      padding:14px 14px 12px;color:#fff;
     }
-    canvas { display:block; }
-
-    #overlayDot {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      width: 8px;
-      height: 8px;
-      margin-left: -4px;
-      margin-top: -4px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.55);
-      pointer-events: none;
-      z-index: 5;
+    #row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+    button{
+      appearance:none;border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.06);color:#fff;
+      padding:10px 14px;border-radius:14px;font-weight:700;
     }
-
-    #ui {
-      position: fixed;
-      left: 12px;
-      top: 12px;
-      z-index: 10;
-      width: min(520px, calc(100vw - 24px));
-      color: rgba(255,255,255,0.95);
+    button:active{transform:scale(.99)}
+    #boot{font-weight:800;margin:6px 0 8px}
+    #msg{opacity:.92;line-height:1.35}
+    #diag{margin-top:10px;display:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+    #err{margin-top:10px;color:#ff6b6b;font-weight:800;white-space:pre-wrap;display:none}
+    #dot{
+      position:fixed;left:50%;top:50%;width:8px;height:8px;border-radius:999px;
+      transform:translate(-50%,-50%);background:rgba(255,255,255,.7);z-index:2;
     }
-
-    .panel {
-      background: rgba(0,0,0,0.55);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 14px;
-      padding: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
-      backdrop-filter: blur(8px);
-    }
-
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-
-    button {
-      appearance:none;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.95);
-      border-radius: 12px;
-      padding: 10px 12px;
-      font-size: 14px;
-      font-weight: 600;
-    }
-    button:active { transform: scale(0.99); }
-
-    #status {
-      margin-top: 10px;
-      font-size: 14px;
-      line-height: 1.35;
-      opacity: 0.95;
-      white-space: pre-wrap;
-    }
-
-    #diag {
-      position: fixed;
-      right: 12px;
-      top: 12px;
-      z-index: 10;
-      width: min(420px, calc(100vw - 24px));
-      display: none;
-    }
-
-    #diag pre {
-      margin: 0;
-      font-size: 12px;
-      line-height: 1.35;
-      color: rgba(255,255,255,0.92);
-      white-space: pre-wrap;
-    }
-
-    a { color: rgba(180,210,255,0.95); }
+    canvas{display:block}
   </style>
 </head>
 <body>
-  <div id="overlayDot"></div>
-
-  <div id="ui" class="panel">
-    <div class="row">
-      <button id="btnMouse">Enable Mouse Look</button>
-      <button id="btnReset">Reset Position</button>
-      <button id="btnDiag">Toggle Diagnostics</button>
-      <span id="xrSlot"></span>
+  <div id="hud">
+    <div id="row">
+      <button id="mouseBtn">Enable Mouse Look</button>
+      <button id="resetBtn">Reset Position</button>
+      <button id="diagBtn">Toggle Diagnostics</button>
+      <button id="xrBtn" title="Will show WebXR availability">VR: Checking…</button>
     </div>
-    <div id="status">Booting…</div>
-    <div style="margin-top:8px; font-size:13px; opacity:0.9;">
-      Controls: <b>WASD</b> move, <b>Shift</b> run, <b>Space</b> up, <b>C</b> down. Tap “Enable Mouse Look” for FPS-style.
-      <br/>NPC: male avatar pedestal + female avatar pedestal; one animated bot walks around the table.
-      <br/>This build is <b>NO-MODULE</b> to avoid GitHub Pages / mobile module issues.
+    <div id="boot">Booting…</div>
+    <div id="msg">
+      Controls: <b>WASD</b> move, <b>Shift</b> run, <b>Space</b> up, <b>C</b> down.<br/>
+      NPC: <b>male avatar pedestal</b> + <b>male animated bot walking</b> around the table.<br/>
+      This build is <b>NO-MODULE</b> + CDN scripts (mobile/GitHub Pages safe).
     </div>
+    <div id="err"></div>
+    <div id="diag"></div>
   </div>
+  <div id="dot"></div>
 
-  <div id="diag" class="panel"><pre id="diagText">Diagnostics…</pre></div>
-
-  <!-- NO MODULES: use CDN UMD scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/webxr/VRButton.js"></script>
+  <!-- Three.js (global) -->
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <!-- Examples (global attach to THREE.*) -->
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/webxr/VRButton.js"></script>
 
   <script>
   (function(){
-    const UI = {
-      status: document.getElementById('status'),
-      diag: document.getElementById('diag'),
-      diagText: document.getElementById('diagText'),
-      btnMouse: document.getElementById('btnMouse'),
-      btnReset: document.getElementById('btnReset'),
-      btnDiag: document.getElementById('btnDiag'),
-    };
+    const $ = (id)=>document.getElementById(id);
+    const bootEl = $("boot"), diagEl=$("diag"), errEl=$("err");
+    const mouseBtn=$("mouseBtn"), resetBtn=$("resetBtn"), diagBtn=$("diagBtn"), xrBtn=$("xrBtn");
 
-    function setStatus(msg){ UI.status.textContent = msg; }
-    function setDiag(msg){ UI.diagText.textContent = msg; }
-    function appendDiag(msg){ UI.diagText.textContent += "\n" + msg; }
+    function setErr(msg){
+      errEl.style.display = msg ? "block":"none";
+      errEl.textContent = msg || "";
+    }
+    function setBoot(msg){ bootEl.textContent = msg; }
 
-    // Make sure UI buttons work EVEN if 3D fails
-    let diagOn = false;
-    UI.btnDiag.onclick = () => { diagOn = !diagOn; UI.diag.style.display = diagOn ? 'block' : 'none'; };
-
-    // Error visibility
-    window.addEventListener('error', (e)=>{
-      console.error(e);
-      setStatus('❌ JS Error: ' + (e.message || 'Unknown'));
-      appendDiag('[window.error] ' + (e.message || e));
-    });
-    window.addEventListener('unhandledrejection', (e)=>{
-      console.error(e);
-      setStatus('❌ Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
-      appendDiag('[unhandledrejection] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
-    });
-
-    // Verify Three loaded
-    if (!window.THREE || !THREE.WebGLRenderer) {
-      setStatus('❌ THREE did not load from CDN. (Network blocked?)');
-      setDiag('THREE missing. Check network / adblock / CSP.');
+    // --- Basic checks
+    try{
+      if(!window.THREE) throw new Error("THREE not loaded");
+      if(!THREE.GLTFLoader) throw new Error("GLTFLoader not loaded (THREE.GLTFLoader missing)");
+    }catch(e){
+      setErr("JS Error: " + e.message);
+      setBoot("Stopped");
       return;
     }
 
-    // --- Scene ---
+    // --- Renderer / Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x05060a);
+    scene.fog = new THREE.Fog(0x050505, 6, 40);
 
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.05, 500);
-    camera.position.set(0, 1.7, 6);
+    const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 200);
+    camera.position.set(0, 1.7, 7);
 
-    const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.shadowMap.enabled = true;
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // XR button (Quest / WebXR)
-    try {
-      document.body.appendChild(VRButton.createButton(renderer));
-    } catch (err) {
-      appendDiag('VRButton not available on this browser.');
-    }
+    // VR button + status
+    try{
+      const vrBtn = VRButton.createButton(renderer);
+      // Hide the ugly default button but still enable WebXR capability
+      vrBtn.style.display = "none";
+      document.body.appendChild(vrBtn);
+    }catch(e){ /* ignore */ }
 
-    // Lights
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x101018, 0.9));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.25);
-    dir.position.set(6, 10, 6);
+    if(navigator.xr){
+      xrBtn.textContent = "VR: Available";
+    }else{
+      xrBtn.textContent = "VR: No WebXR";
+    }
+    xrBtn.onclick = ()=> {
+      // Try to click hidden VRButton if present
+      const hidden = document.querySelector('button[style*="display: none"]');
+      if(hidden) hidden.click();
+    };
+
+    // --- Lights
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x111111, 0.9);
+    scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+    dir.position.set(6, 10, 4);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.mapSize.set(1024,1024);
     scene.add(dir);
 
-    // Floor
+    // --- Floor
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ color: 0x0b0e16, roughness: 1, metalness: 0 })
+      new THREE.PlaneGeometry(200,200),
+      new THREE.MeshStandardMaterial({color:0x0b0b0b, roughness:1.0, metalness:0.0})
     );
     floor.rotation.x = -Math.PI/2;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Big table
+    // --- Big table centerpiece
     const tableGroup = new THREE.Group();
-    const tableTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.2, 2.2, 0.18, 48),
-      new THREE.MeshStandardMaterial({ color: 0x1a6b3a, roughness: 0.85, metalness: 0.05 })
+    const top = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.3,2.3,0.18,48),
+      new THREE.MeshStandardMaterial({color:0x0e6b4c, roughness:0.9, metalness:0.05})
     );
-    tableTop.position.y = 1.0;
-    tableTop.castShadow = true;
-    tableTop.receiveShadow = true;
-    tableGroup.add(tableTop);
+    top.position.y = 1.0;
+    top.castShadow = true;
+    top.receiveShadow = true;
 
-    const tableEdge = new THREE.Mesh(
-      new THREE.TorusGeometry(2.25, 0.12, 16, 64),
-      new THREE.MeshStandardMaterial({ color: 0x2a1b12, roughness: 0.6, metalness: 0.15 })
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(2.33, 0.10, 16, 64),
+      new THREE.MeshStandardMaterial({color:0x2a1b10, roughness:0.8, metalness:0.1})
     );
-    tableEdge.position.y = 1.05;
-    tableEdge.rotation.x = Math.PI/2;
-    tableEdge.castShadow = true;
-    tableGroup.add(tableEdge);
+    rim.position.y = 1.06;
+    rim.rotation.x = Math.PI/2;
+    rim.castShadow = true;
 
-    for (let i=0;i<4;i++){
-      const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.16, 0.22, 1.0, 18),
-        new THREE.MeshStandardMaterial({ color: 0x22160f, roughness: 0.8, metalness: 0.1 })
-      );
-      const a = (i/4) * Math.PI * 2;
-      leg.position.set(Math.cos(a)*0.9, 0.5, Math.sin(a)*0.9);
-      leg.castShadow = true;
-      leg.receiveShadow = true;
-      tableGroup.add(leg);
-    }
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55,0.85,0.85,28),
+      new THREE.MeshStandardMaterial({color:0x1a1a1a, roughness:0.8, metalness:0.15})
+    );
+    base.position.y = 0.55;
+    base.castShadow = true;
+
+    tableGroup.add(top, rim, base);
+    tableGroup.position.set(0,0,0);
     scene.add(tableGroup);
 
-    function makePedestal(x,z){
-      const p = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.6,0.7,0.6,24),
-        new THREE.MeshStandardMaterial({ color: 0x202431, roughness: 0.8, metalness: 0.1 })
-      );
-      p.position.set(x,0.3,z);
-      p.castShadow = true;
-      p.receiveShadow = true;
-      scene.add(p);
+    // --- Pedestal for display avatar
+    const pedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55,0.65,0.35,24),
+      new THREE.MeshStandardMaterial({color:0x202020, roughness:0.85, metalness:0.15})
+    );
+    pedestal.position.set(-3.2, 0.175, -0.8);
+    pedestal.castShadow = true;
+    pedestal.receiveShadow = true;
+    scene.add(pedestal);
 
-      const stage = new THREE.Mesh(
-        new THREE.RingGeometry(0.9,1.2,48),
-        new THREE.MeshStandardMaterial({ color: 0x0f1420, roughness: 1, metalness: 0 })
-      );
-      stage.position.set(x,0.01,z);
-      stage.rotation.x = -Math.PI/2;
-      scene.add(stage);
+    // --- Simple movement
+    const keys = new Set();
+    window.addEventListener("keydown", (e)=>keys.add(e.code));
+    window.addEventListener("keyup", (e)=>keys.delete(e.code));
 
-      return p;
-    }
-
-    const pedMale = makePedestal(-4, 0);
-    const pedFemale = makePedestal(-4, -3);
-
-    // --- Basic FPS movement ---
     let mouseLook = false;
     let yaw = 0, pitch = 0;
-    const keys = {};
+    const euler = new THREE.Euler(0,0,0,"YXZ");
 
-    UI.btnMouse.onclick = async () => {
-      mouseLook = !mouseLook;
-      UI.btnMouse.textContent = mouseLook ? 'Mouse Look: ON' : 'Enable Mouse Look';
-      if (mouseLook) {
-        try { await renderer.domElement.requestPointerLock(); } catch(e){}
-      } else {
-        try { document.exitPointerLock(); } catch(e){}
-      }
+    function requestPointerLock(){
+      renderer.domElement.requestPointerLock?.();
+    }
+    function exitPointerLock(){
+      document.exitPointerLock?.();
+    }
+    document.addEventListener("pointerlockchange", ()=>{
+      mouseLook = (document.pointerLockElement === renderer.domElement);
+      mouseBtn.textContent = mouseLook ? "Disable Mouse Look" : "Enable Mouse Look";
+    });
+    mouseBtn.onclick = ()=>{
+      if(!mouseLook) requestPointerLock();
+      else exitPointerLock();
     };
 
-    UI.btnReset.onclick = () => {
-      camera.position.set(0, 1.7, 6);
+    window.addEventListener("mousemove", (e)=>{
+      if(!mouseLook) return;
+      yaw   -= e.movementX * 0.0022;
+      pitch -= e.movementY * 0.0022;
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    });
+
+    resetBtn.onclick = ()=>{
+      camera.position.set(0,1.7,7);
       yaw = 0; pitch = 0;
     };
 
-    window.addEventListener('keydown', (e)=>{ keys[e.code] = true; });
-    window.addEventListener('keyup', (e)=>{ keys[e.code] = false; });
+    // --- Diagnostics
+    let showDiag = false;
+    diagBtn.onclick = ()=>{
+      showDiag = !showDiag;
+      diagEl.style.display = showDiag ? "block":"none";
+    };
 
-    window.addEventListener('mousemove', (e)=>{
-      if (!mouseLook || document.pointerLockElement !== renderer.domElement) return;
-      yaw -= e.movementX * 0.002;
-      pitch -= e.movementY * 0.002;
-      const lim = Math.PI/2 - 0.05;
-      pitch = Math.max(-lim, Math.min(lim, pitch));
-    });
-
-    function updateCamera(dt){
-      // Apply rotation
-      camera.rotation.set(pitch, yaw, 0, 'YXZ');
-
-      // Movement in camera yaw plane
-      const forward = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,yaw,0));
-      const right = new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0,yaw,0));
-
-      let speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? 4.0 : 2.2;
-      let vel = new THREE.Vector3();
-      if (keys['KeyW']) vel.add(forward);
-      if (keys['KeyS']) vel.sub(forward);
-      if (keys['KeyA']) vel.sub(right);
-      if (keys['KeyD']) vel.add(right);
-      if (keys['Space']) vel.y += 1;
-      if (keys['KeyC']) vel.y -= 1;
-
-      if (vel.lengthSq() > 0) {
-        vel.normalize().multiplyScalar(speed * dt);
-        camera.position.add(vel);
-      }
-    }
-
-    // --- GLB Loading ---
+    // --- GLB loading (male only; female removed)
     const loader = new THREE.GLTFLoader();
+    let displayAvatar = null;
 
-    function prepModel(obj){
-      obj.traverse((o)=>{
-        if (o.isMesh) {
-          o.castShadow = true;
-          o.receiveShadow = true;
-          o.frustumCulled = false;
-          if (o.material) o.material.side = THREE.DoubleSide;
-        }
+    function safeLoad(url, onOk){
+      loader.load(url, onOk, undefined, (err)=>{
+        console.warn("GLB load failed:", url, err);
+        setErr("Asset load failed: " + url + "\\n(If you renamed folders, check case-sensitive paths.)");
       });
     }
 
-    function fitOnPedestal(model, pedestal, scaleTarget){
-      // center, scale
-      const box = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const s = (scaleTarget || 1.6) / maxDim;
-      model.scale.setScalar(s);
-
-      // recompute
-      const box2 = new THREE.Box3().setFromObject(model);
-      const center = new THREE.Vector3();
-      box2.getCenter(center);
-      model.position.sub(center);
-
-      // put on top
-      model.position.y += 0.6; // pedestal height top
-      model.position.x += pedestal.position.x;
-      model.position.z += pedestal.position.z;
-    }
-
-    let bot = null;
-    let botMixer = null;
-    let botAction = null;
-
-    const navTargets = [];
-    for (let i=0;i<10;i++){
-      const a = (i/10) * Math.PI*2;
-      navTargets.push(new THREE.Vector3(Math.cos(a)*3.2, 0, Math.sin(a)*3.2));
-    }
-    let botTargetIndex = 0;
-
-    function spawnWalkingBot(gltf){
-      bot = gltf.scene;
-      prepModel(bot);
-
-      // scale bot
-      const box = new THREE.Box3().setFromObject(bot);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const s = 1.7 / maxDim;
-      bot.scale.setScalar(s);
-
-      bot.position.set(0, 0, -2);
-      scene.add(bot);
-
-      if (gltf.animations && gltf.animations.length) {
-        botMixer = new THREE.AnimationMixer(bot);
-        const clip = gltf.animations.find(c => /walk|run/i.test(c.name)) || gltf.animations[0];
-        botAction = botMixer.clipAction(clip);
-        botAction.play();
-      }
-
-      appendDiag('Bot spawned. Animations: ' + (gltf.animations ? gltf.animations.length : 0));
-    }
-
-    function updateBot(dt){
-      if (!bot) return;
-      if (botMixer) botMixer.update(dt);
-
-      const target = navTargets[botTargetIndex];
-      const dir = new THREE.Vector3().subVectors(target, bot.position);
-      dir.y = 0;
-      const dist = dir.length();
-      if (dist < 0.25) {
-        botTargetIndex = (botTargetIndex + 1) % navTargets.length;
-        return;
-      }
-      dir.normalize();
-
-      const speed = 0.85;
-      bot.position.addScaledVector(dir, speed * dt);
-
-      // face movement direction
-      const yaw = Math.atan2(dir.x, dir.z);
-      bot.rotation.y = yaw;
-    }
-
-    // Load pedestal avatars (async)
-    setStatus('Loading avatars…');
-    setDiag('THREE ' + THREE.REVISION + '\nLoading GLBs…');
-
-    loader.load(
-      './assets/avatars/Character_output.glb',
-      (gltf)=>{
-        const m = gltf.scene;
-        prepModel(m);
-        fitOnPedestal(m, pedMale, 1.8);
-        scene.add(m);
-        appendDiag('Male avatar loaded: Character_output.glb');
-      },
-      (p)=>{},
-      (err)=>{ appendDiag('❌ Male avatar failed: ' + (err && err.message ? err.message : err)); }
-    );
-
-    loader.load(
-      './assets/avatars/FemaleAvatar.glb',
-      (gltf)=>{
-        const m = gltf.scene;
-        prepModel(m);
-        fitOnPedestal(m, pedFemale, 1.8);
-        scene.add(m);
-        appendDiag('Female avatar loaded: FemaleAvatar.glb');
-      },
-      (p)=>{},
-      (err)=>{ appendDiag('❌ Female avatar failed: ' + (err && err.message ? err.message : err)); }
-    );
-
-    loader.load(
-      './assets/avatars/Meshy_Merged_Animations.glb',
-      (gltf)=>{
-        spawnWalkingBot(gltf);
-        appendDiag('Walking bot loaded: Meshy_Merged_Animations.glb');
-      },
-      (p)=>{},
-      (err)=>{ appendDiag('❌ Walking bot failed: ' + (err && err.message ? err.message : err)); }
-    );
-
-    // Resize
-    window.addEventListener('resize', ()=>{
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    // Display avatar on pedestal
+    safeLoad("./assets/avatars/Character_output.glb", (gltf)=>{
+      displayAvatar = gltf.scene;
+      displayAvatar.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; if(o.material) o.material.side = THREE.DoubleSide; }});
+      displayAvatar.position.set(-3.2, 0.35, -0.8);
+      displayAvatar.scale.setScalar(1.0);
+      // face table
+      displayAvatar.rotation.y = Math.PI/2;
+      scene.add(displayAvatar);
+      setBoot("World: Ready (display loaded)");
+      setErr(""); // clear asset error if previously shown
     });
 
-    // FPS counter
-    let lastT = performance.now();
-    let fps = 0;
-    function tickFps(now){
-      const dt = (now - lastT) / 1000;
-      lastT = now;
-      fps = 0.9*fps + 0.1*(1/Math.max(dt,0.0001));
-      return dt;
+    // NPC bot (animated)
+    let bot = null, botMixer = null, botAction = null;
+    const waypoints = [
+      new THREE.Vector3( 0.0, 0.0, -2.8),
+      new THREE.Vector3( 2.6, 0.0, -0.2),
+      new THREE.Vector3( 0.0, 0.0,  2.8),
+      new THREE.Vector3(-2.6, 0.0, -0.2),
+    ];
+    let wp = 0;
+    const tmp = new THREE.Vector3();
+    const vel = new THREE.Vector3();
+
+    safeLoad("./assets/avatars/Meshy_Merged_Animations.glb", (gltf)=>{
+      // clone via SkeletonUtils for skinned meshes
+      bot = THREE.SkeletonUtils.clone(gltf.scene);
+      bot.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; if(o.material) o.material.side = THREE.DoubleSide; }});
+      bot.position.set(0,0, -3.3);
+      bot.scale.setScalar(1.0);
+      scene.add(bot);
+
+      if(gltf.animations && gltf.animations.length){
+        botMixer = new THREE.AnimationMixer(bot);
+        // try to find walk/idle
+        const walk = gltf.animations.find(a=>/walk/i.test(a.name)) || gltf.animations[0];
+        botAction = botMixer.clipAction(walk);
+        botAction.play();
+      }
+      setBoot("World: Ready (bot loaded)");
+      setErr("");
+    });
+
+    function updateBot(dt){
+      if(!bot) return;
+      const target = waypoints[wp];
+      tmp.copy(target).sub(bot.position);
+      tmp.y = 0;
+      const dist = tmp.length();
+      if(dist < 0.25){
+        wp = (wp+1) % waypoints.length;
+        return;
+      }
+      tmp.normalize();
+      const speed = 1.0;
+      vel.copy(tmp).multiplyScalar(speed * dt);
+      bot.position.add(vel);
+
+      // face direction (prevents walking backwards)
+      if(vel.lengthSq() > 1e-6){
+        const yaw = Math.atan2(vel.x, vel.z);
+        bot.rotation.y = yaw;
+      }
     }
 
-    // Animate
-    setStatus('Ready (loading models in background)…');
+    // --- Resize
+    window.addEventListener("resize", ()=>{
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
 
-    function animate(now){
-      const dt = tickFps(now);
-      updateCamera(dt);
-      updateBot(dt);
+    // --- Render loop starts immediately (no more “stuck booting”)
+    let last = performance.now();
+    let fps = 0, frames = 0, fpsT = 0;
 
-      if (diagOn) {
-        UI.diagText.textContent =
-          'THREE ' + THREE.REVISION +
-          '\nFPS: ' + fps.toFixed(1) +
-          '\nCam: ' + camera.position.x.toFixed(2) + ', ' + camera.position.y.toFixed(2) + ', ' + camera.position.z.toFixed(2) +
-          '\nXR: ' + (renderer.xr && renderer.xr.isPresenting ? 'Presenting' : 'Idle') +
-          '\nModels: ' + (bot ? 'bot ok' : 'bot …') + ' | male … | female …' +
-          '\n(If a model fails, see console/network in DevTools)';
+    function step(now){
+      const dt = Math.min(0.05, (now-last)/1000);
+      last = now;
+
+      // camera rotation from mouse look
+      euler.set(pitch, yaw, 0);
+      camera.quaternion.setFromEuler(euler);
+
+      // movement
+      const run = keys.has("ShiftLeft") || keys.has("ShiftRight");
+      const speed = (run ? 6.0 : 3.2);
+      const up = new THREE.Vector3(0,1,0);
+      const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+      forward.y = 0; forward.normalize();
+      const right = new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+      right.y = 0; right.normalize();
+
+      const move = new THREE.Vector3();
+      if(keys.has("KeyW")) move.add(forward);
+      if(keys.has("KeyS")) move.sub(forward);
+      if(keys.has("KeyD")) move.add(right);
+      if(keys.has("KeyA")) move.sub(right);
+      if(keys.has("Space")) move.y += 1;
+      if(keys.has("KeyC")) move.y -= 1;
+
+      if(move.lengthSq()>0){
+        move.normalize().multiplyScalar(speed*dt);
+        camera.position.add(move);
       }
 
+      // animation mixers
+      if(botMixer) botMixer.update(dt);
+      updateBot(dt);
+
       renderer.render(scene, camera);
+
+      // fps + diag
+      frames++; fpsT += dt;
+      if(fpsT >= 0.5){
+        fps = Math.round(frames / fpsT);
+        frames = 0; fpsT = 0;
+      }
+      if(showDiag){
+        diagEl.textContent =
+          "FPS: " + fps + "\\n" +
+          "Cam: " + camera.position.x.toFixed(2)+", "+camera.position.y.toFixed(2)+", "+camera.position.z.toFixed(2) + "\\n" +
+          "XR enabled: " + renderer.xr.enabled + "\\n" +
+          "Bot loaded: " + (!!bot) + "\\n" +
+          "Display loaded: " + (!!displayAvatar) + "\\n" +
+          "GLTFLoader: " + (typeof THREE.GLTFLoader);
+      }
     }
 
-    renderer.setAnimationLoop(animate);
+    renderer.setAnimationLoop(step);
 
+    // Show ready even if assets take time
+    setBoot("World: Rendering… (assets loading in background)");
   })();
   </script>
 </body>
