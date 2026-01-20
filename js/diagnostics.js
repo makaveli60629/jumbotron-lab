@@ -21,20 +21,20 @@ AFRAME.registerComponent('diagnostics-overlay', {
     const hasBotW = !!AFRAME.components['bot-walker'];
     const hasBotS = !!AFRAME.components['bot-seated'];
 
-    const animLines = [];
     const animDb = window.__ANIM_DIAG__ || {};
+    const lines = [];
     for (const k of Object.keys(animDb)) {
       const a = animDb[k];
-      animLines.push(`${k}: active="${a.active||''}"  idle="${a.idle||''}"  walk="${a.walk||''}"  run="${a.run||''}"`);
+      lines.push(`${k}: animationsRemoved=${a.removed} clips=${a.clipCount} (static)`);
       if (a.names && a.names.length) {
         const short = a.names.slice(0, 10).join(', ') + (a.names.length > 10 ? ' …' : '');
-        animLines.push(`   clips: ${short}`);
+        lines.push(`   clips: ${short}`);
       }
     }
-    const animText = animLines.length ? animLines.join('\n') : '(waiting for model-loaded)';
+    const animText = lines.length ? lines.join('\n') : '(waiting for model-loaded)';
 
     this.diag.textContent =
-`Scarlett Lobby v3.1 (Casino Realistic)
+`Scarlett Lobby v3.2 (NO-ANIM TEST)
 FPS: ${this._fps.toFixed(1)}   Mode: ${mode}
 Rig: x=${pos.x.toFixed(2)} z=${pos.z.toFixed(2)}
 Joy: x=${joy.x.toFixed(2)} y=${joy.y.toFixed(2)} ${joy.active ? '(touch)' : ''}
@@ -46,7 +46,7 @@ Modules:
 - bot-walker:           ${hasBotW ? 'OK' : 'MISSING'}
 - bot-seated:           ${hasBotS ? 'OK' : 'MISSING'}
 
-Animation:
+Avatars (static):
 ${animText}`;
   }
 });

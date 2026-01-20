@@ -1,46 +1,24 @@
-function pickSafeClip(animations, wants){
-  if(!animations||!animations.length) return null;
-  const bad=/(fight|punch|attack|kick|boxing|combat|shoot|strike)/i;
-  for(const w of wants){
-    const c=animations.find(a=>(a.name||'').toLowerCase()===w.toLowerCase());
-    if(c && !bad.test(c.name||'')) return c;
-  }
-  for(const w of wants){
-    const c=animations.find(a=>(a.name||'').toLowerCase().includes(w.toLowerCase()));
-    if(c && !bad.test(c.name||'')) return c;
-  }
-  return animations.find(a=>!bad.test(a.name||'')) || null;
-}
-
-AFRAME.registerComponent('animation-sanitizer', {
-  schema:{mode:{default:'walker'}, label:{default:'model'}},
+AFRAME.registerComponent('no-anim', {
+  schema:{label:{default:'model'}},
   init:function(){
     this.el.addEventListener('model-loaded', ()=>{
+      // Force-remove any animation-mixer added elsewhere (or by old builds)
+      if (this.el.hasAttribute('animation-mixer')) this.el.removeAttribute('animation-mixer');
+      // Also detach mixer component if it exists
+      if (this.el.components && this.el.components['animation-mixer']) {
+        try { this.el.components['animation-mixer'].pause(); } catch(e) {}
+      }
+
       const mesh=this.el.getObject3D('mesh');
       const anims = mesh?.animations || [];
       const names = anims.map(a=>a.name||'').filter(Boolean);
-      const seated = (this.data.mode === 'seated');
-
-      const idle = pickSafeClip(anims, ['idle','stand','breathing']);
-      const walk = pickSafeClip(anims, ['walk','walking']);
-      const run  = pickSafeClip(anims, ['run','running']);
-
-      const clip = seated ? (idle || walk || run) : (walk || idle || run);
 
       window.__ANIM_DIAG__ = window.__ANIM_DIAG__ || {};
       window.__ANIM_DIAG__[this.data.label] = {
-        active: clip?.name || '',
-        idle: idle?.name || '',
-        walk: walk?.name || '',
-        run:  run?.name || '',
+        removed: true,
+        clipCount: anims.length,
         names
       };
-
-      if (clip?.name) {
-        this.el.setAttribute('animation-mixer', `clip: ${clip.name}; loop: repeat; timeScale: 1`);
-      } else {
-        console.warn('animation-sanitizer: no SAFE animations found (all clips look combat/blocked).');
-      }
     });
   }
 });
