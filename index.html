@@ -1,25 +1,63 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Test Server - Dev Station</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Scarlett Test Server VR Lobby (Safe Mode)</title>
   <style>
-    body{font-family:system-ui,Arial;margin:24px;background:#0b0f14;color:#e8eef7}
-    a{color:#7ee0ff}
-    .card{background:#111a24;border:1px solid #203044;border-radius:12px;padding:16px;max-width:760px}
-    code{background:#0a121c;padding:2px 6px;border-radius:6px}
+    html,body{margin:0;height:100%;background:#0b0f14;color:#e6eef7;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    #hud{position:fixed;left:0;top:0;right:0;pointer-events:none;padding:10px;display:flex;gap:10px;align-items:flex-start}
+    .card{pointer-events:auto;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);
+      border-radius:14px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    #diag{min-width:280px;max-width:44vw;font-size:12px;line-height:1.35}
+    #actions{display:flex;gap:8px;flex-wrap:wrap}
+    button{appearance:none;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#e6eef7;
+      border-radius:12px;padding:8px 10px;font-weight:600}
+    button:hover{background:rgba(255,255,255,.12)}
+    #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:min(720px,92vw);
+      background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:10px 12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.4);display:none}
+    #canvas{width:100%;height:100%;display:block}
+    /* On-screen controls (Android) */
+    #touch{position:fixed;left:0;right:0;bottom:0;height:40vh;pointer-events:none;display:flex;justify-content:space-between;padding:14px}
+    .stickWrap{pointer-events:auto;width:160px;height:160px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+      display:grid;place-items:center}
+    .stick{width:74px;height:74px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18)}
+    .btnCol{pointer-events:auto;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+    .bigBtn{width:120px}
+    .hint{opacity:.85;font-size:12px;margin-top:4px}
+    @media (pointer:fine){
+      #touch{display:none}
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Dev Station (Permanent Boot)</h1>
-    <p>This build keeps your <b>boot + diagnostics</b> stable, and loads worlds/modules safely.</p>
-    <p><a href="./dev/index.html">Open Dev World</a></p>
-    <p>Tip: Host via HTTPS (GitHub Pages) for WebXR / VR button.</p>
-    <p><code>/core</code> = permanent boot + diagnostics (do not edit)<br/>
-       <code>/worlds</code> = worlds (safe to edit)<br/>
-       <code>/modules</code> = plug-ins (safe to edit)</p>
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <div class="card" id="actions">
+      <button id="btnVR">Enter VR</button>
+      <button id="btnReset">Reset Pose</button>
+      <button id="btnToggleDiag">Toggle Diagnostics</button>
+      <button id="btnSafety">Safety Mode: ON</button>
+    </div>
+    <div class="card" id="diag"></div>
   </div>
+
+  <div id="toast"></div>
+
+  <div id="touch">
+    <div>
+      <div class="stickWrap" id="leftStick"><div class="stick" id="leftKnob"></div></div>
+      <div class="hint">Move</div>
+    </div>
+    <div class="btnCol">
+      <button class="bigBtn" id="btnJump">Action</button>
+      <button class="bigBtn" id="btnSprint">Sprint</button>
+      <div class="hint">Android controls</div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>
