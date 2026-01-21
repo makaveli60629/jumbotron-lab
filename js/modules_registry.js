@@ -1,9 +1,8 @@
 // Module registry: add/remove modules here without touching engine.
 // Any module must export: init(ctx) -> { update(dt,t)?, dispose()? }
-
 export const MODULES = [
-  // Example:
-  // { name: "dealer_bot", enabled: false, path: "./js/modules/dealer_bot.js" }
+  { name: "module_sandbox_ui", enabled: true,  path: "./js/modules/module_sandbox_ui.js" },
+  { name: "poker_table_sim",  enabled: true,  path: "./js/modules/poker_table_sim.js" }
 ];
 
 export async function loadEnabledModules(ctx){
@@ -11,7 +10,7 @@ export async function loadEnabledModules(ctx){
   for (const m of MODULES){
     if (!m.enabled) continue;
     try{
-      const mod = await import(m.path);
+      const mod = await import(m.path + `?v=${Date.now()}`); // cache-bust during dev
       const inst = await (mod.init?.(ctx) ?? null);
       if (inst) loaded.push(inst);
       ctx?.log?.(`Module OK: ${m.name}`);
