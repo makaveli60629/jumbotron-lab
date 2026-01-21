@@ -1,179 +1,136 @@
-// AndroidControls: left joystick move + right drag look.
-// Also supports Desktop: WASD + mouse drag look.
-// This is designed to be self-contained and safe for Quest browsers.
+// core/android_controls.js
+// Robust Android + Desktop controls with on-screen joystick + drag look.
 
-export class AndroidControls {
-  constructor({ player, camera, dom, log }){
-    this._isHudTarget = (ev) => {
-      const t = ev.target;
-      return !!(t && t.closest && t.closest("#hud"));
+export default {
+  init({ THREE, camera, player, domElement, log }) {
+    const state = {
+      enabled: true,
+      move: { x:0, y:0 },
+      yaw: 0,
+      pitch: 0,
+      speed: 3.0,
+      lookSpeed: 0.006,
+      isPointerDown: false,
+      lastX: 0,
+      lastY: 0,
+      isMobile: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent),
+      ui: { joyActive:false, joyWrap:null }
     };
-    this.player = player;
-    this.camera = camera;
-    this.dom = dom;
-    this.log = log || (()=>{});
 
-    this.move = { x:0, y:0 };
-    this.look = { dx:0, dy:0 };
-    this.speed = 2.2;          // meters/sec walk
-    this.turnSpeed = 1.6;      // radians/sec when using drag
-    this.pitch = 0;            // camera pitch
-    this.keys = Object.create(null);
+    const keys = {};
+    window.addEventListener("keydown", (e)=> keys[e.key.toLowerCase()] = true, { passive:true });
+    window.addEventListener("keyup", (e)=> keys[e.key.toLowerCase()] = false, { passive:true });
 
-    // Touch visuals
-    this.joyBase = document.getElementById("joyBase");
-    this.joyKnob = document.getElementById("joyKnob");
-    this.lookHint = document.getElementById("lookHint");
+    function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
 
-    // Touch state
-    this.leftTouchId = null;
-    this.rightTouchId = null;
-    this.leftOrigin = null;
-    this.rightLast = null;
-
-    this._bind();
-    this._showTouchUIIfMobile();
-  }
-
-  _showTouchUIIfMobile(){
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile){
-      this.joyBase.style.display = "block";
-      this.lookHint.style.display = "block";
-      this.joyKnob.style.left = "50%";
-      this.joyKnob.style.top = "50%";
+    function onDown(x,y){ state.isPointerDown = true; state.lastX = x; state.lastY = y; }
+    function onMove(x,y){
+      if(!state.isPointerDown) return;
+      const dx = x - state.lastX;
+      const dy = y - state.lastY;
+      state.lastX = x; state.lastY = y;
+      if(state.ui.joyActive) return; // don't look when dragging joystick
+      state.yaw   -= dx * state.lookSpeed;
+      state.pitch -= dy * state.lookSpeed;
+      state.pitch = clamp(state.pitch, -1.2, 1.2);
     }
-  }
+    function onUp(){ state.isPointerDown = false; }
 
-  _bind(){
-    // Keyboard
-    window.addEventListener("keydown", (e)=> this.keys[e.code] = true);
-    window.addEventListener("keyup", (e)=> this.keys[e.code] = false);
+    domElement.addEventListener("pointerdown", (e)=> onDown(e.clientX, e.clientY));
+    domElement.addEventListener("pointermove", (e)=> onMove(e.clientX, e.clientY));
+    domElement.addEventListener("pointerup", onUp);
+    domElement.addEventListener("pointercancel", onUp);
+    domElement.style.touchAction = "none";
 
-    // Mouse (drag look)
-    let dragging = false;
-    let last = null;
-    this.dom.addEventListener("mousedown",(e)=>{ dragging=true; last={x:e.clientX,y:e.clientY}; });
-    window.addEventListener("mouseup",()=>{ dragging=false; last=null; });
-    window.addEventListener("mousemove",(e)=>{
-      if (!dragging || !last) return;
-      const dx = e.clientX - last.x;
-      const dy = e.clientY - last.y;
-      last = {x:e.clientX,y:e.clientY};
-      this.look.dx += dx * 0.0022;
-      this.look.dy += dy * 0.0022;
-    });
+    function makeJoy(){
+      const wrap = document.createElement("div");
+      wrap.id = "scarlett-joy-wrap";
+      wrap.style.cssText = "position:fixed;left:18px;bottom:18px;width:140px;height:140px;z-index:9998;touch-action:none;user-select:none;pointer-events:auto;";
+      const base = document.createElement("div");
+      base.style.cssText = "position:absolute;inset:0;border-radius:999px;background:rgba(0,255,255,0.12);border:1px solid rgba(0,255,255,0.65);backdrop-filter:blur(4px);";
+      const knob = document.createElement("div");
+      knob.style.cssText = "position:absolute;left:50%;top:50%;width:64px;height:64px;transform:translate(-50%,-50%);border-radius:999px;background:rgba(0,255,255,0.35);border:1px solid rgba(0,255,255,0.9);";
+      wrap.appendChild(base); wrap.appendChild(knob);
+      document.body.appendChild(wrap);
 
-    // Touch
-    window.addEventListener("touchstart",(e)=>this._onTouchStart(e), {passive:false});
-    window.addEventListener("touchmove",(e)=>this._onTouchMove(e), {passive:false});
-    window.addEventListener("touchend",(e)=>this._onTouchEnd(e), {passive:false});
-    window.addEventListener("touchcancel",(e)=>this._onTouchEnd(e), {passive:false});
-  }
+      const center = { x:0, y:0 };
+      const maxR = 52;
 
-  _onTouchStart(e){
-    // prevent page scroll/zoom
-    if (!this._isHudTarget(e)) e.preventDefault();
-
-    for (const t of e.changedTouches){
-      const isLeft = t.clientX < window.innerWidth * 0.5;
-
-      if (isLeft && this.leftTouchId === null){
-        this.leftTouchId = t.identifier;
-        this.leftOrigin = { x: t.clientX, y: t.clientY };
-        // move joystick base to touch start
-        this.joyBase.style.left = Math.max(18, Math.min(window.innerWidth-160, t.clientX-70)) + "px";
-        this.joyBase.style.bottom = Math.max(18, Math.min(window.innerHeight-160, (window.innerHeight - t.clientY)-70)) + "px";
-        this._setKnob(0,0);
-      }else if (!isLeft && this.rightTouchId === null){
-        this.rightTouchId = t.identifier;
-        this.rightLast = { x: t.clientX, y: t.clientY };
+      function setKnob(nx, ny){
+        knob.style.left = (70 + nx) + "px";
+        knob.style.top  = (70 + ny) + "px";
       }
+      setKnob(0,0);
+
+      function joyDown(e){
+        state.ui.joyActive = true;
+        const r = wrap.getBoundingClientRect();
+        center.x = r.left + r.width/2;
+        center.y = r.top + r.height/2;
+        wrap.setPointerCapture(e.pointerId);
+        joyMove(e);
+        e.preventDefault();
+      }
+      function joyMove(e){
+        if(!state.ui.joyActive) return;
+        const dx = e.clientX - center.x;
+        const dy = e.clientY - center.y;
+        const len = Math.hypot(dx,dy);
+        const s = len > maxR ? (maxR/len) : 1;
+        const nx = dx*s, ny = dy*s;
+        setKnob(nx, ny);
+        state.move.x = clamp(nx / maxR, -1, 1);
+        state.move.y = clamp(-ny / maxR, -1, 1);
+        e.preventDefault();
+      }
+      function joyUp(e){
+        state.ui.joyActive = false;
+        state.move.x = 0; state.move.y = 0;
+        setKnob(0,0);
+        try{ wrap.releasePointerCapture(e.pointerId); }catch(_){}
+        e.preventDefault();
+      }
+
+      wrap.addEventListener("pointerdown", joyDown);
+      wrap.addEventListener("pointermove", joyMove);
+      wrap.addEventListener("pointerup", joyUp);
+      wrap.addEventListener("pointercancel", joyUp);
+
+      state.ui.joyWrap = wrap;
     }
-  }
 
-  _onTouchMove(e){
-    if (!this._isHudTarget(e)) e.preventDefault();
-    for (const t of e.changedTouches){
-      if (t.identifier === this.leftTouchId && this.leftOrigin){
-        const dx = t.clientX - this.leftOrigin.x;
-        const dy = t.clientY - this.leftOrigin.y;
-        const r = 50; // max radius
-        const nx = Math.max(-r, Math.min(r, dx));
-        const ny = Math.max(-r, Math.min(r, dy));
-        this._setKnob(nx, ny);
-        // move vector: x=strafe, y=forward (invert Y)
-        this.move.x = (nx / r);
-        this.move.y = (-ny / r);
+    if (state.isMobile) makeJoy();
+
+    log?.("Controls: joystick + drag look ready.");
+
+    return {
+      update(dt){
+        if(!state.enabled) return;
+
+        // Desktop WASD
+        let mx = 0, my = 0;
+        if(keys["a"]) mx -= 1;
+        if(keys["d"]) mx += 1;
+        if(keys["w"]) my += 1;
+        if(keys["s"]) my -= 1;
+
+        // Mobile joystick
+        mx += state.move.x;
+        my += state.move.y;
+
+        player.rotation.y = state.yaw;
+        camera.rotation.x = state.pitch;
+
+        const speed = state.speed * dt;
+        if (mx || my){
+          const forward = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
+          const right   = new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion);
+          forward.y = 0; right.y = 0;
+          forward.normalize(); right.normalize();
+          player.position.addScaledVector(forward, my * speed);
+          player.position.addScaledVector(right,  mx * speed);
+        }
       }
-      if (t.identifier === this.rightTouchId && this.rightLast){
-        const dx = t.clientX - this.rightLast.x;
-        const dy = t.clientY - this.rightLast.y;
-        this.rightLast = { x: t.clientX, y: t.clientY };
-        this.look.dx += dx * 0.0030;
-        this.look.dy += dy * 0.0030;
-      }
-    }
+    };
   }
-
-  _onTouchEnd(e){
-    if (!this._isHudTarget(e)) e.preventDefault();
-    for (const t of e.changedTouches){
-      if (t.identifier === this.leftTouchId){
-        this.leftTouchId = null;
-        this.leftOrigin = null;
-        this.move.x = 0; this.move.y = 0;
-        this._setKnob(0,0);
-      }
-      if (t.identifier === this.rightTouchId){
-        this.rightTouchId = null;
-        this.rightLast = null;
-      }
-    }
-  }
-
-  _setKnob(x,y){
-    // x,y in px relative to center
-    this.joyKnob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
-
-  update(dt){
-    // Keyboard input blended with joystick
-    let mx = this.move.x;
-    let my = this.move.y;
-
-    if (this.keys["KeyW"]) my += 1;
-    if (this.keys["KeyS"]) my -= 1;
-    if (this.keys["KeyA"]) mx -= 1;
-    if (this.keys["KeyD"]) mx += 1;
-
-    // normalize (avoid faster diagonal)
-    const len = Math.hypot(mx, my);
-    if (len > 1){ mx /= len; my /= len; }
-
-    // Apply yaw + pitch from look deltas
-    const yawDelta = this.look.dx * this.turnSpeed;
-    this.player.rotation.y -= yawDelta;
-
-    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - this.look.dy * 1.2));
-    this.camera.rotation.x = this.pitch;
-
-    // decay look deltas
-    this.look.dx *= 0.65;
-    this.look.dy *= 0.65;
-
-    // Move in player-local space (XZ plane)
-    const speed = this.speed;
-    const forward = my * speed * dt;
-    const strafe  = mx * speed * dt;
-
-    // player forward vector (based on yaw)
-    const yaw = this.player.rotation.y;
-    const sin = Math.sin(yaw);
-    const cos = Math.cos(yaw);
-
-    // forward is -Z in three, but we move player in world coords
-    this.player.position.x += (strafe * cos) + (forward * sin);
-    this.player.position.z += (strafe * -sin) + (forward * cos);
-  }
-}
+};
