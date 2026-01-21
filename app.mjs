@@ -124,6 +124,8 @@ export async function start({ log } = {}){
               || mod.default
               || null;
       log("Controls: OK");
+      try{ window.__scarlett_setJoystickVisible?.(true); }catch(_){ }
+
     }catch(err){
       log(`Controls: FAIL (${err?.message || err}).`);
     }

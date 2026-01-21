@@ -105,6 +105,41 @@
     <div class="lookHint" id="lookHint">Look: drag right side</div>
   </div>
 
-  <script src="./boot.js"></script>
+  <script>
+(function(){
+  const hud=document.getElementById("hud");
+  const showBtn=document.getElementById("hudShowBtn");
+  const playBtn=document.getElementById("toggleHudBtn");
+  const minBtn=document.getElementById("hudMinBtn");
+  const joyBtn=document.getElementById("toggleJoyBtn");
+  function hideHud(){ if(hud) hud.style.display="none"; if(showBtn) showBtn.style.display="block"; }
+  function showHud(){ if(hud) hud.style.display="block"; if(showBtn) showBtn.style.display="none"; }
+  function minimizeHud(){
+    if(!hud) return;
+    const minimized = hud.getAttribute("data-min")==="1";
+    if(!minimized){
+      hud.setAttribute("data-min","1");
+      Array.from(hud.children).forEach((c,i)=>{ if(i>0) c.style.display="none"; });
+      if(minBtn) minBtn.textContent="EXPAND HUD";
+    }else{
+      hud.setAttribute("data-min","0");
+      Array.from(hud.children).forEach((c)=>{ c.style.display=""; });
+      if(minBtn) minBtn.textContent="MINIMIZE HUD";
+    }
+  }
+  if(playBtn) playBtn.addEventListener("click", hideHud);
+  if(showBtn) showBtn.addEventListener("click", showHud);
+  if(minBtn) minBtn.addEventListener("click", minimizeHud);
+
+  let joyVisible = true;
+  window.__scarlett_setJoystickVisible = (v)=>{
+    joyVisible = !!v;
+    const el = document.getElementById("scarlett-joy-wrap");
+    if(el) el.style.display = joyVisible ? "block":"none";
+  };
+  if(joyBtn) joyBtn.addEventListener("click", ()=> window.__scarlett_setJoystickVisible(!joyVisible));
+})();
+</script>
+<script src="./boot.js"></script>
 </body>
 </html>
