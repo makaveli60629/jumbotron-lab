@@ -1,485 +1,487 @@
-import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { Reflector } from "three/addons/objects/Reflector.js";
-import { TexturePacket } from "./textures.js";
+// js/world.js
+// Scarlett Test Server - Upgraded World + Avatar Mirror + Bots + Cards (Quest-safe)
+// Optional: if you place /assets/bot.glb, bots will use it and auto-play animations when present.
 
 export const World = {
-  async init({ THREE, scene, renderer, camera, player, controls, log }) {
-    const s = { THREE, scene, renderer, camera, player, controls, log, root: new THREE.Group() };
+  async init({ THREE, scene, renderer, camera, player, log }) {
+    const s = {
+      THREE, scene, renderer, camera, player,
+      log: log || ((...a)=>console.log(...a)),
+      root: new THREE.Group(),
+      clock: new THREE.Clock(),
+      mixers: [],
+      bots: { seated: [], walker: null },
+      cards: [],
+      colliders: { room: { minX:-16, maxX:16, minZ:-16, maxZ:16 }, table: { x:0, z:0, r:3.2 } },
+      mirror: null,
+      assets: { botUrl: "./assets/bot.glb" },
+    };
+
     scene.add(s.root);
-    // Soft fog for depth
-    scene.fog = new THREE.Fog(0x05080f, 8, 45);
+    scene.background = new THREE.Color(0x05070c);
+    scene.fog = new THREE.Fog(0x05070c, 10, 55);
 
+    addLighting(s);
+    buildRoom(s);
+    buildPokerTable(s);
+    const seats = buildChairs(s);
 
-    // Lighting (avatar-friendly)
-    s.root.add(new THREE.AmbientLight(0xffffff, 0.55));
+    buildMirrorStation(s);
+    buildSeatCards(s, seats);
+    await buildBots(s, seats);
 
-    const key = new THREE.DirectionalLight(0xffffff, 0.95);
-    key.position.set(3, 6, 3);
-    s.root.add(key);
-
-    const rim = new THREE.DirectionalLight(0x66ffff, 0.35);
-    rim.position.set(-4, 3, -3);
-    s.root.add(rim);
-
-    // Scale grid
-    const grid = new THREE.GridHelper(40, 40, 0x003333, 0x001a1a);
-    s.root.add(grid);
-
-    // Room shell (simple walls)
-    buildRoomShell(s);
-
-    // Tables
-    buildShowroom(s);
-    buildScorpion(s);
-
-    // Mirror wall (Reflector)
-    buildMirror(s);
-
-    // Avatar preview system
-    s.avatar = createAvatarApi(s);
-    // Avatar is loaded MANUALLY from HUD to avoid mobile/Quest fetch stalls.
-
-    log?.("World init OK. Use the Avatar Lab sliders + mirror to tune body scale/rotation.");
+    s.log("[World] Ready: room + table + mirror + bots + cards.");
     return {
-      avatar: s.avatar,
-      update: (dt, t) => {
-        if (s._previewRing) s._previewRing.rotation.y += dt * 0.25;
-        s.avatar._update?.(dt, t);
-      }
+      update(dt, t) {
+        const delta = (dt && isFinite(dt)) ? dt : s.clock.getDelta();
+        for (const mx of s.mixers) mx.update(delta);
+        updateWalker(s, delta, t || 0);
+        updateSeatedBreathing(s, t || 0);
+        updateCards(s, t || 0);
+        applyCollision(s);
+      },
+      collide() { applyCollision(s); }
     };
   }
 };
 
-function buildRoomShell(s){
-  const mat = new s.THREE.MeshStandardMaterial({ color: 0x05080f, roughness: 0.95, metalness: 0.0 });
-  const floor = new s.THREE.Mesh(new s.THREE.PlaneGeometry(60,60), mat);
+function addLighting(s){
+  const { THREE, root } = s;
+  root.add(new THREE.AmbientLight(0x4a5a6a, 0.75));
+
+  const key = new THREE.DirectionalLight(0x88ccff, 1.0);
+  key.position.set(6, 10, 4);
+  root.add(key);
+
+  const fill = new THREE.DirectionalLight(0x66ffff, 0.55);
+  fill.position.set(-8, 7, -6);
+  root.add(fill);
+}
+
+function buildRoom(s){
+  const { THREE, root } = s;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ color: 0x0b1420, roughness: 0.95, metalness: 0.0 })
+  );
   floor.rotation.x = -Math.PI/2;
   floor.position.y = 0;
-  s.root.add(floor);
+  root.add(floor);
 
-  const wallMat = new s.THREE.MeshStandardMaterial({ color: 0x070c18, roughness: 0.9, metalness: 0.05 });
-  const back = new s.THREE.Mesh(new s.THREE.PlaneGeometry(60,12), wallMat);
-  back.position.set(0, 6, -18);
-  s.root.add(back);
+  const grid = new THREE.GridHelper(40, 40, 0x00ffff, 0x113344);
+  grid.position.y = 0.01;
+  root.add(grid);
 
-  const left = new s.THREE.Mesh(new s.THREE.PlaneGeometry(36,12), wallMat);
-  left.position.set(-18, 6, 0);
-  left.rotation.y = Math.PI/2;
-  s.root.add(left);
-
-  const right = new s.THREE.Mesh(new s.THREE.PlaneGeometry(36,12), wallMat);
-  right.position.set(18, 6, 0);
-  right.rotation.y = -Math.PI/2;
-  s.root.add(right);
-}
-
-function buildShowroom(s){
-  const feltTex = TexturePacket.getShowroomFelt();
-  const mat = new s.THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.9, metalness: 0.02 });
-
-  const table = new s.THREE.Mesh(new s.THREE.CylinderGeometry(3.2, 3.3, 0.38, 72), mat);
-  table.position.set(0, 0.95, 0);
-  s.root.add(table);
-
-  const base = new s.THREE.Mesh(
-    new s.THREE.CylinderGeometry(1.2, 1.4, 0.9, 48),
-    new s.THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8, metalness: 0.1 })
+  const walls = new THREE.Mesh(
+    new THREE.BoxGeometry(40, 10, 40),
+    new THREE.MeshStandardMaterial({ color: 0x070b12, roughness: 1.0, metalness: 0.0, side: THREE.BackSide })
   );
-  base.position.set(0, 0.45, 0);
-  s.root.add(base);
+  walls.position.y = 5;
+  root.add(walls);
 
-  // Avatar preview pedestal (in front of player)
-  const pedestal = new s.THREE.Mesh(
-    new s.THREE.CylinderGeometry(0.55, 0.65, 0.2, 32),
-    new s.THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.7, metalness: 0.2 })
-  );
-  pedestal.position.set(0, 0.10, 2.6);
-  s.root.add(pedestal);
-
-  const ring = new s.THREE.Mesh(
-    new s.THREE.TorusGeometry(0.75, 0.02, 12, 64),
-    new s.THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x003333, roughness: 0.25, metalness: 0.2 })
-  );
-  ring.position.set(0, 0.30, 2.6);
-  ring.rotation.x = Math.PI/2;
-  s.root.add(ring);
-  s._previewRing = ring;
-
-  // Position marker at feet (helps judge height)
-  const feet = new s.THREE.Mesh(
-    new s.THREE.CircleGeometry(0.28, 32),
-    new s.THREE.MeshStandardMaterial({ color: 0x00ffff, transparent: true, opacity: 0.25 })
-  );
-  feet.rotation.x = -Math.PI/2;
-  feet.position.set(0, 0.01, 2.6);
-  s.root.add(feet);
-}
-
-function buildScorpion(s){
-  const scTex = TexturePacket.getScorpionFelt();
-  const mat = new s.THREE.MeshStandardMaterial({ map: scTex, roughness: 0.85, metalness: 0.04 });
-  const table = new s.THREE.Mesh(new s.THREE.CylinderGeometry(1.9, 2.0, 0.34, 48), mat);
-  table.position.set(8, 0.95, -2);
-  s.root.add(table);
-}
-
-function buildMirror(s){
-  // Mirror wall positioned behind the avatar preview so you can see front + back easily.
-  const geom = new s.THREE.PlaneGeometry(6.5, 4.2);
-  const mirror = new Reflector(geom, {
-    clipBias: 0.003,
-    textureWidth: Math.floor(window.innerWidth * (window.devicePixelRatio || 1)),
-    textureHeight: Math.floor(window.innerHeight * (window.devicePixelRatio || 1)),
-    color: 0x202020
+  const stripMat = new THREE.MeshStandardMaterial({
+    color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 1.5,
+    roughness: 0.4, metalness: 0.0
   });
-  mirror.position.set(0, 2.2, 5.4);
-  mirror.rotation.y = Math.PI; // face toward avatar/player
-  s.root.add(mirror);
-
-  // Frame
-  const frame = new s.THREE.Mesh(
-    new s.THREE.BoxGeometry(6.7, 4.4, 0.08),
-    new s.THREE.MeshStandardMaterial({ color: 0x0a0f18, roughness: 0.8, metalness: 0.2 })
-  );
-  frame.position.copy(mirror.position);
-  frame.rotation.copy(mirror.rotation);
-  frame.position.z += 0.02;
-  s.root.add(frame);
-}
-
-function createAvatarApi(s){
-  const loader = new GLTFLoader();
-
-  const tuning = {
-    scale: 1.0,
-    yaw: Math.PI,
-    y: 0.22,
-    z: 2.6,
-    x: 0.0
-  };
-
-  let avatarRoot = null;
-  let skeletonHelper = null;
-
-  async function load(url, opts = {}){
-    const resolved = url || "./assets/avatar.glb";
-    s.log?.(`Avatar load: ${resolved}`);
-
-    // cleanup old
-    // Walker bot patrol + leg animation
-    if (s._walker) updateWalkerBot(s, dt, t);
-
-    if (avatarRoot){
-      s.root.remove(avatarRoot);
-      avatarRoot.traverse?.((o)=>{
-        if (o.geometry) o.geometry.dispose?.();
-        if (o.material) disposeMaterial(o.material);
-      });
-      avatarRoot = null;
-    }
-    if (skeletonHelper){
-      s.root.remove(skeletonHelper);
-      skeletonHelper = null;
-    }
-
-    const gltf = await Promise.race([
-    new Promise((resolve, reject) => loader.load(resolved, resolve, undefined, reject)),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Avatar load timeout (6s)")), 6000))
-  ]);
-    avatarRoot = gltf.scene || gltf.scenes?.[0];
-    if (!avatarRoot) throw new Error("GLTF has no scene.");
-
-    // normalize scale to ~1.7m (then multiply tuning.scale)
-    avatarRoot.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(avatarRoot);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-
-    let auto = 1.0;
-    if (size.y > 0.1){
-      auto = 1.70 / size.y;
-      s.log?.(`Avatar auto-scale: ${size.y.toFixed(2)}m -> 1.70m (x${auto.toFixed(2)})`);
-    }
-
-    avatarRoot.position.set(tuning.x, tuning.y, tuning.z);
-    avatarRoot.rotation.y = tuning.yaw;
-    avatarRoot.scale.setScalar(auto * tuning.scale);
-
-    s.root.add(avatarRoot);
-    s.log?.("Avatar OK (preview station).");
-  }
-
-  function setScale(v){
-    tuning.scale = clamp(v, 0.01, 10);
-    applyTuning();
-  }
-  function setYawDeg(deg){
-    tuning.yaw = THREE.MathUtils.degToRad(deg % 360);
-    applyTuning();
-  }
-  function setY(v){
-    tuning.y = v;
-    applyTuning();
-  }
-  function resetTuning(){
-    tuning.scale = 1.0;
-    tuning.yaw = Math.PI;
-    tuning.y = 0.22;
-    applyTuning();
-  }
-  function getTuning(){ return { ...tuning }; }
-
-  function applyTuning(){
-    if (!avatarRoot) return;
-    avatarRoot.position.set(tuning.x, tuning.y, tuning.z);
-    avatarRoot.rotation.y = tuning.yaw;
-
-    // keep existing base scale but multiply by tuning.scale
-    avatarRoot.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(avatarRoot);
-    const size = new THREE.Vector3(); box.getSize(size);
-    // If we can't infer, just apply scalar
-    const current = avatarRoot.scale.x || 1;
-    const base = current / (tuning._lastAppliedScale || 1);
-    avatarRoot.scale.setScalar(base * tuning.scale);
-    tuning._lastAppliedScale = tuning.scale;
-
-    if (skeletonHelper){
-      skeletonHelper.update();
-    }
-  }
-
-  function toggleSkeleton(){
-    if (!avatarRoot) return false;
-    if (skeletonHelper){
-      s.root.remove(skeletonHelper);
-      skeletonHelper = null;
-      return false;
-    }
-    skeletonHelper = new THREE.SkeletonHelper(avatarRoot);
-    skeletonHelper.visible = true;
-    s.root.add(skeletonHelper);
-    return true;
-  }
-
-  function _update(){
-    if (skeletonHelper) skeletonHelper.update();
-  }
-
-  return { load, setScale, setYawDeg, setY, resetTuning, toggleSkeleton, getTuning, _update };
-}
-
-function disposeMaterial(mat){
-  if (Array.isArray(mat)) return mat.forEach(disposeMaterial);
-  mat.map?.dispose?.();
-  mat.normalMap?.dispose?.();
-  mat.roughnessMap?.dispose?.();
-  mat.metalnessMap?.dispose?.();
-  mat.emissiveMap?.dispose?.();
-  mat.dispose?.();
-}
-
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-
-
-// --- Simple collision: keeps player out of table + walls ---
-
-function collidePlayer(s){
-  if(!s?.player) return;
-  const p = s.player.position;
-  // Room bounds (match buildRoomShell)
-  const minX=-17.2, maxX=17.2, minZ=-17.2, maxZ=17.2;
-  p.x = Math.max(minX, Math.min(maxX, p.x));
-  p.z = Math.max(minZ, Math.min(maxZ, p.z));
-
-  // Center table collider (radius slightly larger than table)
-  const cx=0, cz=0, r=3.55;
-  const dx=p.x-cx, dz=p.z-cz;
-  const d=Math.hypot(dx,dz);
-  if(d < r){
-    const sgn = (d===0)?1:(r/d);
-    p.x = cx + dx*sgn;
-    p.z = cz + dz*sgn;
+  for (let i=0;i<4;i++){
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(12, 0.08, 0.18), stripMat);
+    strip.position.set(0, 9.2, -6 + i*4);
+    root.add(strip);
   }
 }
 
-
-// --- World visual upgrades (safe for Quest/Android) ---
-
-function buildEnvironmentEnhancements(s){
-  // Ceiling
-  const ceiling = new s.THREE.Mesh(
-    new s.THREE.PlaneGeometry(60,60),
-    new s.THREE.MeshStandardMaterial({ color: 0x03050b, roughness: 1.0, metalness: 0.0, side: s.THREE.DoubleSide })
+function buildPokerTable(s){
+  const { THREE, root } = s;
+  const felt = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.0, 3.15, 0.28, 64),
+    new THREE.MeshStandardMaterial({ color: 0x0a1b2a, roughness: 0.9, metalness: 0.0 })
   );
-  ceiling.rotation.x = Math.PI/2;
-  ceiling.position.y = 12;
-  s.root.add(ceiling);
+  felt.position.set(0, 0.72, 0);
+  root.add(felt);
 
-  // Neon strip lights (emissive planes)
-  const stripMat = new s.THREE.MeshStandardMaterial({
-    color: 0x001a1a, emissive: 0x00ffff, emissiveIntensity: 1.2, roughness: 0.4, metalness: 0.2
-  });
-  const stripGeo = new s.THREE.PlaneGeometry(18, 0.35);
-  for (const z of [-10, 0, 10]){
-    const strip = new s.THREE.Mesh(stripGeo, stripMat);
-    strip.position.set(0, 11.6, z);
-    strip.rotation.x = Math.PI/2;
-    s.root.add(strip);
-  }
-
-  // Extra fill lights to remove “black corners”
-  const cyan = new s.THREE.PointLight(0x00ffff, 0.7, 18, 2);
-  cyan.position.set(0, 5.5, 4);
-  s.root.add(cyan);
-
-  const warm = new s.THREE.PointLight(0xffcc88, 0.45, 20, 2);
-  warm.position.set(-6, 4.5, -4);
-  s.root.add(warm);
-
-  // Subtle floor grid for debugging scale
-  const grid = new s.THREE.GridHelper(60, 60, 0x006666, 0x003333);
-  grid.position.y = 0.02;
-  s.root.add(grid);
-
-  // Jumbotron placeholder (safe)
-  const screen = new s.THREE.Mesh(
-    new s.THREE.PlaneGeometry(6.4, 3.6),
-    new s.THREE.MeshStandardMaterial({ color: 0x061018, emissive: 0x001b22, emissiveIntensity: 1.0, roughness: 0.7 })
+  const rail = new THREE.Mesh(
+    new THREE.TorusGeometry(3.05, 0.22, 16, 64),
+    new THREE.MeshStandardMaterial({ color: 0x1b0f0b, roughness: 0.7, metalness: 0.1 })
   );
-  screen.position.set(0, 4.2, -16.8);
-  s.root.add(screen);
+  rail.rotation.x = Math.PI/2;
+  rail.position.set(0, 0.86, 0);
+  root.add(rail);
 
-  const frame = new s.THREE.Mesh(
-    new s.THREE.BoxGeometry(6.7, 3.9, 0.12),
-    new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.5, metalness: 0.3 })
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.4, 1.8, 0.9, 32),
+    new THREE.MeshStandardMaterial({ color: 0x101018, roughness: 0.85, metalness: 0.05 })
   );
-  frame.position.copy(screen.position);
-  frame.position.z -= 0.08;
-  s.root.add(frame);
+  base.position.set(0, 0.35, 0);
+  root.add(base);
 }
 
 function buildChairs(s){
-  // 6 chairs around the showroom table, sized for scale reference
-  const chairMat = new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.85, metalness: 0.1 });
-  const seatMat  = new s.THREE.MeshStandardMaterial({ color: 0x08101f, roughness: 0.95, metalness: 0.05 });
+  const { THREE, root } = s;
+  const seats = [];
+  const r = 4.25;
+  const chairMat = new THREE.MeshStandardMaterial({ color: 0x0f1a28, roughness: 0.95, metalness: 0.0 });
 
-  const seatGeo = new s.THREE.BoxGeometry(0.55, 0.08, 0.55);
-  const backGeo = new s.THREE.BoxGeometry(0.55, 0.65, 0.08);
-  const legGeo  = new s.THREE.CylinderGeometry(0.03, 0.03, 0.45, 10);
-
-  const R = 5.0;
   for (let i=0;i<6;i++){
-    const a = (i/6)*Math.PI*2 + Math.PI/6;
-    const x = Math.cos(a)*R;
-    const z = Math.sin(a)*R;
-    const g = new s.THREE.Group();
+    const a = (i/6)*Math.PI*2 + Math.PI;
+    const x = Math.cos(a)*r;
+    const z = Math.sin(a)*r;
 
-    const seat = new s.THREE.Mesh(seatGeo, seatMat);
-    seat.position.set(0, 0.48, 0);
-    g.add(seat);
+    const chair = new THREE.Group();
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.10, 0.65), chairMat);
+    seat.position.y = 0.45;
+    chair.add(seat);
 
-    const back = new s.THREE.Mesh(backGeo, chairMat);
-    back.position.set(0, 0.82, -0.24);
-    g.add(back);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.70, 0.10), chairMat);
+    back.position.set(0, 0.85, -0.28);
+    chair.add(back);
 
-    for (const lx of [-0.22, 0.22]){
-      for (const lz of [-0.22, 0.22]){
-        const leg = new s.THREE.Mesh(legGeo, chairMat);
-        leg.position.set(lx, 0.24, lz);
-        g.add(leg);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 0.45, 12), chairMat);
+    stem.position.y = 0.22;
+    chair.add(stem);
+
+    const feet = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 16), chairMat);
+    feet.position.y = 0.02;
+    chair.add(feet);
+
+    chair.position.set(x, 0, z);
+    chair.rotation.y = Math.atan2(-x, -z);
+    root.add(chair);
+
+    seats.push({ index:i, chair, x, z, yaw: chair.rotation.y });
+  }
+  seats.push({ index:6, chair:null, x:0, z:-5.2, yaw: 0 });
+  return seats;
+}
+
+function buildMirrorStation(s){
+  const { THREE, root, renderer } = s;
+  const rt = new THREE.WebGLRenderTarget(512, 512, { depthBuffer: true });
+  const mirrorCam = new THREE.PerspectiveCamera(55, 1, 0.1, 50);
+
+  const pose = new THREE.Object3D();
+  pose.position.set(0, 1.5, 6.0);
+  root.add(pose);
+
+  mirrorCam.position.set(0, 1.8, 8.5);
+  mirrorCam.lookAt(pose.position);
+
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 2.2),
+    new THREE.MeshBasicMaterial({ map: rt.texture })
+  );
+  screen.position.set(6.5, 1.8, 6.0);
+  screen.rotation.y = -Math.PI/2;
+  root.add(screen);
+
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(2.3, 2.3, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x001018, roughness: 0.4, metalness: 0.2 })
+  );
+  frame.position.copy(screen.position);
+  frame.rotation.copy(screen.rotation);
+  root.add(frame);
+
+  const label = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.12, 0.02),
+    new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 1.2 })
+  );
+  label.position.set(6.5, 0.55, 6.0);
+  label.rotation.y = -Math.PI/2;
+  root.add(label);
+
+  s.mirror = { rt, mirrorCam, screen, pose };
+
+  const originalRender = renderer.render.bind(renderer);
+  if (!renderer.__scarlettMirrorPatched){
+    renderer.__scarlettMirrorPatched = true;
+    renderer.__scarlettMirrorTick = 0;
+    renderer.render = function(sc, cam){
+      try{
+        const now = performance.now();
+        if(now - renderer.__scarlettMirrorTick > 33){
+          renderer.__scarlettMirrorTick = now;
+          if(s.mirror){
+            const prev = renderer.getRenderTarget();
+            renderer.setRenderTarget(s.mirror.rt);
+            originalRender(sc, s.mirror.mirrorCam);
+            renderer.setRenderTarget(prev);
+          }
+        }
+      }catch(_){}
+      originalRender(sc, cam);
+    };
+  }
+}
+
+function buildSeatCards(s, seats){
+  const { THREE, root } = s;
+
+  function makeCardTexture(rank, suit){
+    const c = document.createElement("canvas");
+    c.width = 256; c.height = 356;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#f7f7f7"; ctx.fillRect(0,0,c.width,c.height);
+    ctx.strokeStyle = "#111"; ctx.lineWidth = 8;
+    ctx.strokeRect(10,10,c.width-20,c.height-20);
+    ctx.fillStyle = (suit==="♥"||suit==="♦") ? "#d11" : "#111";
+    ctx.font = "bold 72px monospace";
+    ctx.fillText(rank, 28, 92);
+    ctx.font = "bold 90px monospace";
+    ctx.fillText(suit, 95, 210);
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = 8;
+    return tex;
+  }
+
+  const ranks = ["A","K","Q","J","10","9"];
+  const suits = ["♠","♥","♦","♣","♠","♥"];
+
+  for (let i=0;i<6;i++){
+    const seat = seats[i];
+    const origin = new THREE.Vector3(seat.x, 1.15, seat.z);
+    const dirToCenter = new THREE.Vector3(0, 1.15, 0).sub(origin).normalize();
+    const base = origin.clone().add(dirToCenter.multiplyScalar(1.1));
+
+    for (let k=0;k<2;k++){
+      const tex = makeCardTexture(ranks[(i+k)%ranks.length], suits[(i+k)%suits.length]);
+      const card = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.22, 0.31),
+        new THREE.MeshBasicMaterial({ map: tex })
+      );
+      card.position.copy(base);
+      card.position.x += (k===0 ? -0.13 : 0.13);
+      card.position.y += 0.10;
+      card.rotation.y = Math.atan2(-seat.x, -seat.z);
+      root.add(card);
+      s.cards.push({ mesh: card, baseY: card.position.y, phase: (i*0.7+k)*0.9 });
+    }
+  }
+}
+
+function updateCards(s, t){
+  for (const c of s.cards){
+    c.mesh.position.y = c.baseY + Math.sin(t*1.4 + c.phase)*0.015;
+    c.mesh.rotation.z = Math.sin(t*0.9 + c.phase)*0.03;
+  }
+}
+
+async function buildBots(s, seats){
+  const { THREE, root } = s;
+
+  let GLTFLoader = null;
+  try{
+    const mod = await import("https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js");
+    GLTFLoader = mod.GLTFLoader;
+  }catch(e){
+    s.log("[World] GLTFLoader unavailable (CDN). Using procedural bots only.");
+  }
+
+  let botGLB = null;
+  if (GLTFLoader){
+    try{
+      botGLB = await loadGLB(GLTFLoader, s.assets.botUrl);
+      s.log("[World] bot.glb loaded (optional).");
+    }catch(e){
+      s.log("[World] bot.glb not found or blocked. Using procedural bots.");
+    }
+  }
+
+  for (let i=0;i<6;i++){
+    const seat = seats[i];
+    const bot = makeBotInstance(s, botGLB, { seated:true, index:i });
+    bot.group.position.set(seat.x, 0.0, seat.z);
+    bot.group.rotation.y = seat.yaw;
+    const back = new THREE.Vector3(0,0,0.28).applyAxisAngle(new THREE.Vector3(0,1,0), bot.group.rotation.y);
+    bot.group.position.add(back);
+    root.add(bot.group);
+    s.bots.seated.push(bot);
+  }
+
+  const walker = makeBotInstance(s, botGLB, { seated:false, index:99 });
+  walker.group.position.set(0, 0.0, 6.0);
+  walker.group.rotation.y = Math.PI;
+  root.add(walker.group);
+  s.bots.walker = walker;
+}
+
+function makeProceduralHumanoid(THREE){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x00aaff, roughness: 0.35, metalness: 0.1 });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.65, 6, 12), mat);
+  body.position.y = 1.05;
+  g.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), mat);
+  head.position.y = 1.60;
+  g.add(head);
+
+  const limbMat = new THREE.MeshStandardMaterial({ color: 0x0ff0ff, roughness: 0.25, metalness: 0.0 });
+  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.35, 4, 10), limbMat);
+  const armR = armL.clone();
+  armL.position.set(-0.32, 1.18, 0);
+  armR.position.set( 0.32, 1.18, 0);
+  g.add(armL); g.add(armR);
+
+  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.42, 4, 10), limbMat);
+  const legR = legL.clone();
+  legL.position.set(-0.14, 0.55, 0);
+  legR.position.set( 0.14, 0.55, 0);
+  g.add(legL); g.add(legR);
+
+  g.userData.limbs = { armL, armR, legL, legR, body, head };
+  return g;
+}
+
+function makeBotInstance(s, botGLB, { seated, index }){
+  const { THREE } = s;
+  const group = new THREE.Group();
+  group.name = seated ? `SeatedBot_${index}` : `WalkerBot_${index}`;
+
+  let model = null;
+  let procedural = null;
+
+  if (botGLB && botGLB.scene){
+    model = botGLB.scene.clone(true);
+    model.traverse((o)=>{
+      if(o.isMesh){
+        o.frustumCulled = false;
+        if(o.material){
+          o.material.transparent = false;
+          o.material.opacity = 1.0;
+          o.material.depthWrite = true;
+          o.material.side = THREE.FrontSide;
+        }
+      }
+    });
+    group.add(model);
+
+    if (botGLB.animations && botGLB.animations.length){
+      const mixer = new THREE.AnimationMixer(model);
+      s.mixers.push(mixer);
+      const clip = pickClip(botGLB.animations, seated ? ["sit","idle"] : ["walk","run"]);
+      if (clip){
+        const act = mixer.clipAction(clip);
+        act.reset().play();
+        act.enabled = true;
+        act.setEffectiveWeight(1.0);
       }
     }
 
-    g.position.set(x, 0, z);
-    g.rotation.y = -a + Math.PI; // face table
-    g.name = "chair_"+i;
-    s.root.add(g);
-  }
-}
+    const box = new THREE.Box3().setFromObject(model);
+    const h = box.max.y - box.min.y;
+    const scale = h > 0.001 ? (1.72 / h) : 1.0;
+    model.scale.setScalar(scale);
+    model.position.y = 0.0;
 
-function createWalkerBot(s){
-  // Procedural bot with animated legs/arms (no GLB needed)
-  const bot = new s.THREE.Group();
-  bot.name = "walker_bot";
-
-  const bodyMat = new s.THREE.MeshStandardMaterial({ color: 0x55aaff, roughness: 0.65, metalness: 0.1 });
-  const limbMat = new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.9, metalness: 0.05 });
-
-  const torso = new s.THREE.Mesh(new s.THREE.CapsuleGeometry(0.18, 0.34, 6, 12), bodyMat);
-  torso.position.set(0, 0.95, 0);
-  bot.add(torso);
-
-  const head = new s.THREE.Mesh(new s.THREE.SphereGeometry(0.14, 18, 18), bodyMat);
-  head.position.set(0, 1.28, 0.03);
-  bot.add(head);
-
-  function limb(){
-    const g = new s.THREE.Group();
-    const upper = new s.THREE.Mesh(new s.THREE.CapsuleGeometry(0.06, 0.22, 4, 10), limbMat);
-    upper.position.set(0, 0.18, 0);
-    g.add(upper);
-    return g;
+  } else {
+    procedural = makeProceduralHumanoid(THREE);
+    group.add(procedural);
   }
 
-  const legL = limb(); legL.position.set(-0.10, 0.46, 0.02);
-  const legR = limb(); legR.position.set( 0.10, 0.46, 0.02);
-  bot.add(legL); bot.add(legR);
+  if (seated){
+    if (procedural?.userData?.limbs){
+      const L = procedural.userData.limbs;
+      L.legL.rotation.x = -0.75;
+      L.legR.rotation.x = -0.75;
+      L.armL.rotation.x = -0.25;
+      L.armR.rotation.x = -0.25;
+      procedural.position.y = -0.15;
+    } else if (model){
+      model.position.y = -0.15;
+    }
+  }
 
-  const armL = limb(); armL.position.set(-0.26, 1.05, 0.0);
-  const armR = limb(); armR.position.set( 0.26, 1.05, 0.0);
-  bot.add(armL); bot.add(armR);
-
-  bot.userData = {
-    legL, legR, armL, armR,
-    radius: 6.3,
-    speed: 1.1,
-    phase: 0,
-    angle: 0,
-    lastPos: new s.THREE.Vector3()
+  return {
+    group,
+    procedural,
+    stridePhase: 0,
+    walkSpeed: 1.35,
+    walkRadius: 6.2,
+    walkAngle: Math.PI,
   };
-
-  // start position
-  bot.position.set(6.3, 0, 0);
-  bot.userData.lastPos.copy(bot.position);
-  s.root.add(bot);
-  return bot;
 }
 
-function updateWalkerBot(s, dt, t){
-  const bot = s._walker;
-  if(!bot) return;
-  const u = bot.userData;
-  // Walk in a circle around the table
-  u.angle += dt * (u.speed / u.radius);
-  const tx = Math.cos(u.angle) * u.radius;
-  const tz = Math.sin(u.angle) * u.radius;
+function pickClip(clips, keywords){
+  if(!clips || !clips.length) return null;
+  const lower = clips.map(c=>({ c, n:(c.name||"").toLowerCase() }));
+  for(const k of keywords){
+    const hit = lower.find(x=>x.n.includes(k));
+    if(hit) return hit.c;
+  }
+  return clips[0];
+}
 
-  // Compute movement
-  const prev = u.lastPos;
-  const next = new s.THREE.Vector3(tx, 0, tz);
-  const vel = next.clone().sub(prev);
-  const dist = vel.length();
-  bot.position.copy(next);
-  u.lastPos.copy(next);
+function loadGLB(GLTFLoader, url){
+  return new Promise((resolve, reject)=>{
+    const loader = new GLTFLoader();
+    loader.load(url, resolve, undefined, reject);
+  });
+}
 
-  // Face direction of travel
-  if(dist > 1e-4){
-    const dir = vel.normalize();
-    bot.rotation.y = Math.atan2(dir.x, dir.z);
+function updateWalker(s, dt, t){
+  const w = s.bots.walker;
+  if(!w) return;
+
+  w.walkAngle += dt * (w.walkSpeed / w.walkRadius);
+  const x = Math.cos(w.walkAngle) * w.walkRadius;
+  const z = Math.sin(w.walkAngle) * w.walkRadius;
+  const prevX = w.group.position.x;
+  const prevZ = w.group.position.z;
+  w.group.position.set(x, 0.0, z);
+
+  const dx = x - prevX;
+  const dz = z - prevZ;
+
+  if (dx*dx + dz*dz > 1e-6){
+    w.group.rotation.y = Math.atan2(dx, dz);
   }
 
-  // Stride phase based on distance traveled (prevents “sliding”)
-  u.phase += dist * 7.0;
-  const swing = Math.sin(u.phase) * 0.7;
-  const swing2 = Math.sin(u.phase + Math.PI) * 0.7;
+  const dist = Math.hypot(dx, dz);
+  w.stridePhase += dist * 6.0;
 
-  u.legL.rotation.x = swing;
-  u.legR.rotation.x = swing2;
-  u.armL.rotation.x = swing2 * 0.8;
-  u.armR.rotation.x = swing * 0.8;
-
-  // Tiny up-down bob while walking
-  bot.position.y = 0.02 + Math.abs(Math.sin(u.phase)) * 0.03;
+  if (w.procedural?.userData?.limbs){
+    const L = w.procedural.userData.limbs;
+    const a = Math.sin(w.stridePhase);
+    const b = Math.sin(w.stridePhase + Math.PI);
+    L.legL.rotation.x = a * 0.65;
+    L.legR.rotation.x = b * 0.65;
+    L.armL.rotation.x = b * 0.45;
+    L.armR.rotation.x = a * 0.45;
+    w.procedural.position.y = Math.sin(w.stridePhase*2) * 0.02;
+  }
 }
+
+function updateSeatedBreathing(s, t){
+  for (const b of s.bots.seated){
+    if (b.procedural?.userData?.limbs){
+      const L = b.procedural.userData.limbs;
+      const breathe = 1 + Math.sin(t*1.6 + b.group.position.x)*0.015;
+      L.body.scale.set(1, breathe, 1);
+      L.head.rotation.y = Math.sin(t*0.35 + b.group.position.z)*0.25;
+    }
+  }
+}
+
+function applyCollision(s){
+  const { player } = s;
+  if(!player) return;
+
+  const r = 0.35;
+  player.position.x = clamp(player.position.x, s.colliders.room.minX + r, s.colliders.room.maxX - r);
+  player.position.z = clamp(player.position.z, s.colliders.room.minZ + r, s.colliders.room.maxZ - r);
+
+  const dx = player.position.x - s.colliders.table.x;
+  const dz = player.position.z - s.colliders.table.z;
+  const d = Math.hypot(dx, dz);
+  const minD = s.colliders.table.r + r;
+  if (d < minD){
+    const k = (minD / (d || 0.0001));
+    player.position.x = s.colliders.table.x + dx * k;
+    player.position.z = s.colliders.table.z + dz * k;
+  }
+
+  if (player.position.y < 0) player.position.y = 0;
+}
+
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
