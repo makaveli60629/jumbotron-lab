@@ -15,9 +15,53 @@ export const World = {
       colliders: { room: { minX:-16, maxX:16, minZ:-16, maxZ:16 }, table: { x:0, z:0, r:3.2 } },
       mirror: null,
       assets: { botUrl: "./assets/bot.glb" },
+      touchJoyState: null,
+      moveSpeed: 2.0,
+      turnSpeed: 1.8,
     };
 
     scene.add(s.root);
+
+    // ---- Avatar Loader (HUD events) ----
+    s.avatar = { obj: null, url: null };
+    const gltfLoader = new GLTFLoader();
+
+    async function loadAvatar(url){
+      try{
+        if(!url) return;
+        s.log(`[Avatar] Loading: ${url}`);
+        // remove old
+        if(s.avatar.obj){ s.root.remove(s.avatar.obj); s.avatar.obj = null; }
+        const gltf = await gltfLoader.loadAsync(url);
+        const obj = gltf.scene || gltf.scenes?.[0];
+        if(!obj) throw new Error("No scene in GLB.");
+        obj.traverse(n=>{ if(n.isMesh){ n.frustumCulled=false; n.castShadow=true; n.receiveShadow=true; } });
+        obj.position.set(0, 0.0, 2.2); // in front of player
+        obj.rotation.y = Math.PI; // face player
+        s.root.add(obj);
+        s.avatar.obj = obj;
+        s.avatar.url = url;
+        s.log("[Avatar] Loaded OK.");
+      }catch(e){
+        s.log("[Avatar] Load error: " + (e?.message||e));
+      }
+    }
+
+    function clearAvatar(){
+      if(s.avatar.obj){ s.root.remove(s.avatar.obj); s.avatar.obj = null; s.avatar.url=null; }
+      s.log("[Avatar] Cleared.");
+    }
+
+    window.addEventListener('scarlett:loadAvatar', (ev)=>{
+      const url = ev?.detail?.url;
+      loadAvatar(url);
+    });
+
+    window.addEventListener('scarlett:clearAvatar', ()=> clearAvatar());
+
+
+    // Android touch joystick (safe)
+    try{ s.touchJoyState = TouchJoystick(player, s.log); }catch(e){ s.log('[Controls] TouchJoystick failed: '+(e?.message||e)); }
     scene.background = new THREE.Color(0x05070c);
     scene.fog = new THREE.Fog(0x05070c, 10, 55);
 
@@ -38,6 +82,23 @@ export const World = {
         updateWalker(s, delta, t || 0);
         updateSeatedBreathing(s, t || 0);
         updateCards(s, t || 0);
+
+        // Apply touch joystick movement (forward/back + strafe)
+        if(s.touchJoyState){
+          const j = s.touchJoyState;
+          const forward = -j.dy; // up = forward
+          const strafe  = j.dx;
+          if(Math.abs(forward) > 0.02 || Math.abs(strafe) > 0.02){
+            const yaw = player.rotation.y;
+            const cos = Math.cos(yaw);
+            const sin = Math.sin(yaw);
+            const sp  = s.moveSpeed * delta;
+            // forward vector (0,0,-1) rotated by yaw
+            player.position.x += (sin * forward + cos * strafe) * sp;
+            player.position.z += (cos * forward - sin * strafe) * sp;
+          }
+        }
+
         applyCollision(s);
       },
       collide() { applyCollision(s); }
@@ -45,6 +106,79 @@ export const World = {
   }
 };
 
+
+// ---- Touch Joystick (Android) ----
+// Safe, no dependencies. Creates a left-side joystick and applies movement to player.
+function TouchJoystick(player, log){
+  const state = { active:false, id:null, cx:0, cy:0, dx:0, dy:0 };
+  const el = document.createElement('div');
+  el.id = 'touchJoy';
+  el.style.cssText = [
+    'position:fixed','left:14px','bottom:14px','width:140px','height:140px',
+    'border-radius:999px','border:1px solid rgba(0,255,255,0.35)',
+    'background:rgba(0,0,0,0.18)','z-index:5000',
+    'touch-action:none','pointer-events:auto','user-select:none'
+  ].join(';');
+
+  const nub = document.createElement('div');
+  nub.style.cssText = [
+    'position:absolute','left:50%','top:50%','width:54px','height:54px',
+    'margin-left:-27px','margin-top:-27px','border-radius:999px',
+    'background:rgba(0,255,255,0.22)','border:1px solid rgba(0,255,255,0.55)'
+  ].join(';');
+  el.appendChild(nub);
+  document.body.appendChild(el);
+
+  function setNub(x,y){
+    nub.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  function begin(ev){
+    const t = ev.changedTouches ? ev.changedTouches[0] : ev;
+    state.active = true;
+    state.id = t.identifier ?? 'mouse';
+    const r = el.getBoundingClientRect();
+    state.cx = r.left + r.width/2;
+    state.cy = r.top + r.height/2;
+    state.dx = 0; state.dy = 0;
+  }
+  function move(ev){
+    if(!state.active) return;
+    const touches = ev.changedTouches ? Array.from(ev.changedTouches) : [ev];
+    const t = touches.find(x => (x.identifier ?? 'mouse') === state.id);
+    if(!t) return;
+    const mx = (t.clientX - state.cx);
+    const my = (t.clientY - state.cy);
+    const max = 40;
+    const len = Math.hypot(mx,my) || 1;
+    const sx = (len > max) ? mx/len*max : mx;
+    const sy = (len > max) ? my/len*max : my;
+    state.dx = sx / max;
+    state.dy = sy / max;
+    setNub(sx, sy);
+  }
+  function end(ev){
+    const touches = ev.changedTouches ? Array.from(ev.changedTouches) : [ev];
+    const hit = touches.find(x => (x.identifier ?? 'mouse') === state.id);
+    if(!hit) return;
+    state.active = false;
+    state.id = null;
+    state.dx = 0; state.dy = 0;
+    setNub(0,0);
+  }
+
+  el.addEventListener('touchstart', (e)=>{ e.preventDefault(); begin(e); }, { passive:false });
+  el.addEventListener('touchmove', (e)=>{ e.preventDefault(); move(e); }, { passive:false });
+  el.addEventListener('touchend', (e)=>{ e.preventDefault(); end(e); }, { passive:false });
+  el.addEventListener('touchcancel', (e)=>{ e.preventDefault(); end(e); }, { passive:false });
+
+  // fallback mouse for desktop testing
+  el.addEventListener('pointerdown', (e)=>{ begin(e); }, { passive:true });
+  window.addEventListener('pointermove', (e)=>{ move(e); }, { passive:true });
+  window.addEventListener('pointerup', (e)=>{ end(e); }, { passive:true });
+
+  log && log('[Controls] TouchJoystick ready.');
+  return state;
+}
 function addLighting(s){
   const { THREE, root } = s;
   root.add(new THREE.AmbientLight(0x4a5a6a, 0.75));
@@ -485,3 +619,38 @@ function applyCollision(s){
 }
 
 function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+
+function updateWalkerBot(s, dt, t) {
+  const w = s.walker;
+  if(!w || !w.group) return;
+
+  // If we later attach a real animated GLB with a mixer, update it
+  if(w.mixer){ w.mixer.update(dt); }
+
+  // Walk path around table (simple loop)
+  w.t += dt * w.speed;
+  const R = 3.6;
+  const ang = (w.t * 0.25) % (Math.PI * 2);
+  const x = Math.cos(ang) * R;
+  const z = Math.sin(ang) * R;
+  w.group.position.x = x;
+  w.group.position.z = z;
+  w.group.position.y = 0.0;
+  w.group.rotation.y = -ang + Math.PI / 2;
+
+  // Procedural walk cycle (visible arm/leg swing)
+  const stride = Math.sin(w.t * 6.0);
+  const swing = stride * 0.65;
+  const lift  = Math.max(0, Math.sin(w.t * 6.0)) * 0.08;
+
+  if(w.limbs){
+    w.limbs.armL.rotation.x =  swing;
+    w.limbs.armR.rotation.x = -swing;
+    w.limbs.legL.rotation.x = -swing;
+    w.limbs.legR.rotation.x =  swing;
+
+    w.limbs.legL.position.y = -0.55 + lift;
+    w.limbs.legR.position.y = -0.55 + (0.08 - lift);
+  }
+}
