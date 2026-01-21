@@ -3,143 +3,212 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>ScarlettVR Test Server — Avatar Lab</title>
+  <title>Scarlett Avatar Lab — Permanent Spine</title>
   <style>
-    html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:monospace;touch-action:none}
-    #app{position:fixed;inset:0}
+    :root{
+      --cyan:#00ffff;
+      --bg: rgba(10,16,32,0.88);
+      --panelW: min(360px, calc(100vw - 24px));
+    }
+    html,body{ margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; touch-action:none; font-family: monospace; }
+    #app{ position:fixed; inset:0; z-index:1; }
+    /* HUD overlay */
     #hud{
-      position:fixed;top:12px;left:12px;z-index:9999;
-      width:360px;max-width:calc(100vw - 24px);
-      background:rgba(10,16,32,.88);border:1px solid #00ffff;
-      color:#00ffff;padding:12px;border-radius:12px;
-      box-shadow:0 10px 30px rgba(0,0,0,.55);
+      position: fixed; top: 10px; left: 10px; z-index: 9999;
+      width: var(--panelW);
+      background: var(--bg);
+      border: 1px solid var(--cyan);
+      padding: 12px;
+      border-radius: 12px;
+      color: var(--cyan);
+      box-shadow: 0 0 24px rgba(0,255,255,0.12);
+      pointer-events: auto; /* allow button presses */
     }
-    #hud h2{margin:0 0 6px 0;font-size:14px}
-    #hud small{color:#9ff;opacity:.9;display:block;line-height:1.25}
-    #hud .row{display:flex;gap:8px;margin-top:8px}
-    #hud input[type="text"]{
-      flex:1;background:#000;border:1px solid #225;color:#0f0;
-      padding:8px;border-radius:8px;font-family:monospace
-    }
-    #hud label{display:block;margin-top:8px;font-size:11px;color:#9ff}
-    #hud input[type="range"]{width:100%}
-    #hud button{
-      width:100%;margin-top:8px;padding:10px;
-      background:#00ffff;color:#000;border:none;border-radius:10px;
-      font-weight:900;cursor:pointer;
-    }
-    #hud button.secondary{background:#102030;color:#00ffff;border:1px solid #00ffff}
-    #hud button.danger{background:#ff3b3b;color:#000}
+    #hud.compact #hudBody{ display:none; }
+    #hud.off{ display:none; }
+    #hudTitle{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    #hudTitle h2{ margin:0; font-size:13px; letter-spacing:0.5px; }
+    #hudSub{ margin-top:6px; font-size:11px; opacity:0.9; line-height:1.25; }
     #hudlog{
-      height:120px;overflow:auto;background:#000;margin-top:8px;
-      border:1px solid #234;border-radius:8px;padding:6px;
-      color:#00ff00;font-size:10px;white-space:pre-wrap;
+      height: 120px; overflow-y:auto; background:#000; font-size:10px;
+      margin-top:10px; padding:6px; border:1px solid #333; color:#00ff41;
+      border-radius: 8px;
+      -webkit-overflow-scrolling: touch;
     }
-    #touchLayer{position:fixed;inset:0;z-index:50;pointer-events:none}
-    .joy{
-      position:absolute;bottom:18px;left:18px;width:140px;height:140px;
-      border-radius:50%;border:2px solid rgba(0,255,255,.35);
-      background:rgba(0,0,0,.15);display:none;
+    .btnRow{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    .btn{
+      flex: 1 1 auto;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 800;
+      cursor: pointer;
+      background: var(--cyan);
+      color:#000;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      min-width: 120px;
     }
-    .knob{
-      position:absolute;left:50%;top:50%;width:54px;height:54px;
-      transform:translate(-50%,-50%);
-      border-radius:50%;
-      border:2px solid rgba(0,255,255,.75);
-      background:rgba(0,255,255,.10);
+    .btn.secondary{ background: transparent; color: var(--cyan); border:1px solid rgba(0,255,255,0.6); }
+    .btn.danger{ background: #ff4d4d; color:#000; }
+    .sliderRow{ margin-top:10px; }
+    .sliderRow label{ display:block; font-size:12px; margin-bottom:4px; color: var(--cyan); opacity:0.95; }
+    input[type="range"]{ width:100%; }
+    #tinyToggle{
+      position: fixed;
+      top: 12px; right: 12px;
+      z-index: 10000;
+      width: 44px; height: 44px;
+      border-radius: 999px;
+      border:1px solid rgba(0,255,255,0.7);
+      background: rgba(10,16,32,0.65);
+      color: var(--cyan);
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px;
+      pointer-events:auto;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    .lookHint{
-      position:absolute;bottom:26px;right:18px;
-      padding:8px 10px;border-radius:10px;
-      border:1px solid rgba(0,255,255,.35);
-      color:#00ffff;background:rgba(0,0,0,.25);
-      display:none;
+    /* allow the canvas to receive touches when HUD is off */
+    body.hudOff #app{ z-index: 10; }
+    /* mobile-friendly: keep HUD smaller */
+    @media (max-width: 420px){
+      #hudlog{ height: 98px; }
+      .btn{ padding: 9px; }
     }
   </style>
-
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-    }
-  }
-  </script>
 </head>
 <body>
   <div id="app"></div>
 
-  <div id="hud">
-    <h2>SCARLETT AVATAR LAB — PERMANENT SPINE</h2>
-    <small>
-      Desktop: WASD + Mouse (drag) • Android: Left Joystick + Right Drag Look • Quest: Enter VR (HUD auto-hides)
-    </small>
+  <div id="tinyToggle" title="Toggle HUD">⚙️</div>
 
-    <div id="statline" style="margin-top:8px;">BOOTING…</div>
-
-    <div class="row">
-      <input id="avatarUrl" type="text" placeholder="Optional GLB/GLTF URL (https://...)" />
+  <div id="hud" class="">
+    <div id="hudTitle">
+      <h2>SCARLETT AVATAR LAB — PERMANENT SPINE</h2>
+      <div style="font-size:11px; opacity:0.85;" id="hudMini">BOOTING…</div>
     </div>
-    <button id="btnLoadAvatar">LOAD AVATAR (URL or /assets/avatar.glb)</button>
 
-    <label>Avatar Scale: <span id="scaleVal">1.00</span></label>
-    <input id="scaleSlider" type="range" min="0.50" max="2.50" step="0.01" value="1.00" />
+    <div id="hudBody">
+      <div id="hudSub">
+        Desktop: WASD + Mouse (drag) • Android: Touch Joystick + Drag Look • Quest: Enter VR (HUD auto-hides)
+      </div>
 
-    <label>Avatar Yaw (Rotate): <span id="yawVal">180°</span></label>
-    <input id="yawSlider" type="range" min="0" max="360" step="1" value="180" />
+      <div class="btnRow">
+        <button class="btn secondary" id="btnCompact">COMPACT</button>
+        <button class="btn secondary" id="btnCopy">COPY LOG</button>
+      </div>
 
-    <label>Avatar Height Offset (Y): <span id="yVal">0.22</span></label>
-    <input id="ySlider" type="range" min="-0.50" max="1.50" step="0.01" value="0.22" />
+      <div class="btnRow">
+        <button class="btn" id="btnPlay">PLAY (HIDE HUD)</button>
+        <button class="btn danger" id="btnShow">SHOW HUD</button>
+      </div>
 
-    <button id="btnToggleSkeleton" class="secondary">TOGGLE SKELETON VIEW</button>
-    <button id="btnResetAvatar" class="secondary">RESET AVATAR TUNING</button>
+      <div class="btnRow">
+        <button class="btn secondary" id="btnReloadModules">RELOAD MODULES</button>
+      </div>
 
-    <div style="margin-top:8px;padding:8px;border:1px solid #234;border-radius:10px;"><div style="font-weight:800;margin-bottom:6px;">MODULE SANDBOX</div><div id="modulesPanel" style="max-height:120px;overflow:auto;color:#9ff;font-size:11px;"></div></div><button id="btnReloadModules" class="secondary">RELOAD MODULES</button>
-    <button id="btnHideHud">PLAY (HIDE HUD)</button>
+      
+      <div style="margin-top:10px; padding:10px; border:1px solid rgba(0,255,255,0.25); border-radius:10px;">
+        <div style="font-size:12px; margin-bottom:6px; color:var(--cyan);">AVATAR QUICK LOAD</div>
+        <input id="avatarUrl" placeholder="GLB/GLTF URL or path (e.g. assets/avatar.glb)" 
+               style="width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid rgba(0,255,255,0.35); background:rgba(0,0,0,0.35); color:var(--cyan);" />
+        <div class="btnRow" style="margin-top:8px;">
+          <button class="btn" id="btnLoadAvatar">LOAD AVATAR</button>
+          <button class="btn secondary" id="btnClearAvatar">CLEAR</button>
+        </div>
+        <div class="btnRow" style="margin-top:8px;">
+          <button class="btn secondary" id="btnLoadPackMale">free_pack_male_base_mesh.glb</button>
+          <button class="btn secondary" id="btnLoadMaleMesh">models/male_mesh.glb</button>
+        </div>
+        <div class="btnRow" style="margin-top:8px;">
+          <button class="btn secondary" id="btnLoadJinRoh">models/combat_ninja_jin_roh.glb</button>
+        </div>
+        <div style="font-size:10px; opacity:0.85; margin-top:6px;">
+          Tip: These are just file paths. Make sure the GLBs exist in your repo at those locations.
+        </div>
+      </div>
 
-    <div id="hudlog">INITIALIZING…</div>
+      <div id="hudlog">INITIALIZING…</div>
+    </div>
   </div>
 
-  <div id="touchLayer">
-    <div class="joy" id="joyBase"><div class="knob" id="joyKnob"></div></div>
-    <div class="lookHint" id="lookHint">Look: drag right side</div>
-  </div>
+  <script type="module" src="./app.mjs"></script>
 
   <script>
-(function(){
-  const hud=document.getElementById("hud");
-  const showBtn=document.getElementById("hudShowBtn");
-  const playBtn=document.getElementById("toggleHudBtn");
-  const minBtn=document.getElementById("hudMinBtn");
-  const joyBtn=document.getElementById("toggleJoyBtn");
-  function hideHud(){ if(hud) hud.style.display="none"; if(showBtn) showBtn.style.display="block"; }
-  function showHud(){ if(hud) hud.style.display="block"; if(showBtn) showBtn.style.display="none"; }
-  function minimizeHud(){
-    if(!hud) return;
-    const minimized = hud.getAttribute("data-min")==="1";
-    if(!minimized){
-      hud.setAttribute("data-min","1");
-      Array.from(hud.children).forEach((c,i)=>{ if(i>0) c.style.display="none"; });
-      if(minBtn) minBtn.textContent="EXPAND HUD";
-    }else{
-      hud.setAttribute("data-min","0");
-      Array.from(hud.children).forEach((c)=>{ c.style.display=""; });
-      if(minBtn) minBtn.textContent="MINIMIZE HUD";
-    }
-  }
-  if(playBtn) playBtn.addEventListener("click", hideHud);
-  if(showBtn) showBtn.addEventListener("click", showHud);
-  if(minBtn) minBtn.addEventListener("click", minimizeHud);
+    // HUD + log helpers (touch safe)
+    const hud = document.getElementById('hud');
+    const tiny = document.getElementById('tinyToggle');
+    const logEl = document.getElementById('hudlog');
+    const mini = document.getElementById('hudMini');
 
-  let joyVisible = true;
-  window.__scarlett_setJoystickVisible = (v)=>{
-    joyVisible = !!v;
-    const el = document.getElementById("scarlett-joy-wrap");
-    if(el) el.style.display = joyVisible ? "block":"none";
-  };
-  if(joyBtn) joyBtn.addEventListener("click", ()=> window.__scarlett_setJoystickVisible(!joyVisible));
-})();
-</script>
-<script src="./boot.js"></script>
+    function setHudMode(mode){
+      hud.classList.remove('compact','off');
+      document.body.classList.remove('hudOff');
+      if(mode === 'compact') hud.classList.add('compact');
+      if(mode === 'off'){ hud.classList.add('off'); document.body.classList.add('hudOff'); }
+    }
+    function toggleHud(){
+      if(hud.classList.contains('off')) setHudMode('compact');
+      else if(hud.classList.contains('compact')) setHudMode('off');
+      else setHudMode('compact');
+    }
+
+    // make clicks work reliably on mobile
+    function bindBtn(id, fn){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('click', fn, { passive:true });
+      el.addEventListener('touchend', (e)=>{ e.preventDefault(); fn(); }, { passive:false });
+    }
+
+    bindBtn('btnPlay', ()=> setHudMode('off'));
+    bindBtn('btnShow', ()=> setHudMode(''));
+    bindBtn('btnCompact', ()=> setHudMode(hud.classList.contains('compact') ? '' : 'compact'));
+    bindBtn('btnCopy', async ()=>{
+      const txt = (logEl?.innerText || '').trim();
+      try{
+        await navigator.clipboard.writeText(txt);
+        mini.textContent = 'LOG COPIED ✅';
+        setTimeout(()=>mini.textContent='OK', 900);
+      }catch(e){
+        // fallback prompt
+        window.prompt("Copy log:", txt);
+      }
+    });
+    
+    const avatarUrl = document.getElementById('avatarUrl');
+    function requestLoad(path){
+      if(avatarUrl) avatarUrl.value = path;
+      window.dispatchEvent(new CustomEvent('scarlett:loadAvatar', { detail: { url: path }}));
+      mini.textContent = 'LOADING AVATAR…';
+      setTimeout(()=>mini.textContent='OK', 900);
+    }
+    bindBtn('btnLoadAvatar', ()=> requestLoad((avatarUrl?.value || '').trim()));
+    bindBtn('btnClearAvatar', ()=> window.dispatchEvent(new CustomEvent('scarlett:clearAvatar')));
+    bindBtn('btnLoadPackMale', ()=> requestLoad('assets/free_pack_male_base_mesh.glb'));
+    bindBtn('btnLoadMaleMesh', ()=> requestLoad('assets/models/male_mesh.glb'));
+    bindBtn('btnLoadJinRoh', ()=> requestLoad('assets/models/combat_ninja_inspired_by_jin_roh_wolf_brigade.glb'));
+
+    bindBtn('btnReloadModules', ()=>{
+      window.dispatchEvent(new CustomEvent('scarlett:reloadModules'));
+      mini.textContent = 'RELOADING…';
+      setTimeout(()=>mini.textContent='OK', 800);
+    });
+    tiny.addEventListener('click', toggleHud);
+    tiny.addEventListener('touchend', (e)=>{ e.preventDefault(); toggleHud(); }, { passive:false });
+
+    // expose a safe logger for modules
+    window.__scarlettLog = function(msg){
+      const line = String(msg);
+      if(mini) mini.textContent = 'OK';
+      if(!logEl) return;
+      logEl.innerText += (logEl.innerText ? "\n" : "") + line;
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+  </script>
 </body>
 </html>
