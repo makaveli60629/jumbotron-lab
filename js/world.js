@@ -7,6 +7,9 @@ export const World = {
   async init({ THREE, scene, renderer, camera, player, controls, log }) {
     const s = { THREE, scene, renderer, camera, player, controls, log, root: new THREE.Group() };
     scene.add(s.root);
+    // Soft fog for depth
+    scene.fog = new THREE.Fog(0x05080f, 8, 45);
+
 
     // Lighting (avatar-friendly)
     s.root.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -164,6 +167,9 @@ function createAvatarApi(s){
     s.log?.(`Avatar load: ${resolved}`);
 
     // cleanup old
+    // Walker bot patrol + leg animation
+    if (s._walker) updateWalkerBot(s, dt, t);
+
     if (avatarRoot){
       s.root.remove(avatarRoot);
       avatarRoot.traverse?.((o)=>{
@@ -275,3 +281,205 @@ function disposeMaterial(mat){
 }
 
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+
+// --- Simple collision: keeps player out of table + walls ---
+
+function collidePlayer(s){
+  if(!s?.player) return;
+  const p = s.player.position;
+  // Room bounds (match buildRoomShell)
+  const minX=-17.2, maxX=17.2, minZ=-17.2, maxZ=17.2;
+  p.x = Math.max(minX, Math.min(maxX, p.x));
+  p.z = Math.max(minZ, Math.min(maxZ, p.z));
+
+  // Center table collider (radius slightly larger than table)
+  const cx=0, cz=0, r=3.55;
+  const dx=p.x-cx, dz=p.z-cz;
+  const d=Math.hypot(dx,dz);
+  if(d < r){
+    const sgn = (d===0)?1:(r/d);
+    p.x = cx + dx*sgn;
+    p.z = cz + dz*sgn;
+  }
+}
+
+
+// --- World visual upgrades (safe for Quest/Android) ---
+
+function buildEnvironmentEnhancements(s){
+  // Ceiling
+  const ceiling = new s.THREE.Mesh(
+    new s.THREE.PlaneGeometry(60,60),
+    new s.THREE.MeshStandardMaterial({ color: 0x03050b, roughness: 1.0, metalness: 0.0, side: s.THREE.DoubleSide })
+  );
+  ceiling.rotation.x = Math.PI/2;
+  ceiling.position.y = 12;
+  s.root.add(ceiling);
+
+  // Neon strip lights (emissive planes)
+  const stripMat = new s.THREE.MeshStandardMaterial({
+    color: 0x001a1a, emissive: 0x00ffff, emissiveIntensity: 1.2, roughness: 0.4, metalness: 0.2
+  });
+  const stripGeo = new s.THREE.PlaneGeometry(18, 0.35);
+  for (const z of [-10, 0, 10]){
+    const strip = new s.THREE.Mesh(stripGeo, stripMat);
+    strip.position.set(0, 11.6, z);
+    strip.rotation.x = Math.PI/2;
+    s.root.add(strip);
+  }
+
+  // Extra fill lights to remove “black corners”
+  const cyan = new s.THREE.PointLight(0x00ffff, 0.7, 18, 2);
+  cyan.position.set(0, 5.5, 4);
+  s.root.add(cyan);
+
+  const warm = new s.THREE.PointLight(0xffcc88, 0.45, 20, 2);
+  warm.position.set(-6, 4.5, -4);
+  s.root.add(warm);
+
+  // Subtle floor grid for debugging scale
+  const grid = new s.THREE.GridHelper(60, 60, 0x006666, 0x003333);
+  grid.position.y = 0.02;
+  s.root.add(grid);
+
+  // Jumbotron placeholder (safe)
+  const screen = new s.THREE.Mesh(
+    new s.THREE.PlaneGeometry(6.4, 3.6),
+    new s.THREE.MeshStandardMaterial({ color: 0x061018, emissive: 0x001b22, emissiveIntensity: 1.0, roughness: 0.7 })
+  );
+  screen.position.set(0, 4.2, -16.8);
+  s.root.add(screen);
+
+  const frame = new s.THREE.Mesh(
+    new s.THREE.BoxGeometry(6.7, 3.9, 0.12),
+    new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.5, metalness: 0.3 })
+  );
+  frame.position.copy(screen.position);
+  frame.position.z -= 0.08;
+  s.root.add(frame);
+}
+
+function buildChairs(s){
+  // 6 chairs around the showroom table, sized for scale reference
+  const chairMat = new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.85, metalness: 0.1 });
+  const seatMat  = new s.THREE.MeshStandardMaterial({ color: 0x08101f, roughness: 0.95, metalness: 0.05 });
+
+  const seatGeo = new s.THREE.BoxGeometry(0.55, 0.08, 0.55);
+  const backGeo = new s.THREE.BoxGeometry(0.55, 0.65, 0.08);
+  const legGeo  = new s.THREE.CylinderGeometry(0.03, 0.03, 0.45, 10);
+
+  const R = 5.0;
+  for (let i=0;i<6;i++){
+    const a = (i/6)*Math.PI*2 + Math.PI/6;
+    const x = Math.cos(a)*R;
+    const z = Math.sin(a)*R;
+    const g = new s.THREE.Group();
+
+    const seat = new s.THREE.Mesh(seatGeo, seatMat);
+    seat.position.set(0, 0.48, 0);
+    g.add(seat);
+
+    const back = new s.THREE.Mesh(backGeo, chairMat);
+    back.position.set(0, 0.82, -0.24);
+    g.add(back);
+
+    for (const lx of [-0.22, 0.22]){
+      for (const lz of [-0.22, 0.22]){
+        const leg = new s.THREE.Mesh(legGeo, chairMat);
+        leg.position.set(lx, 0.24, lz);
+        g.add(leg);
+      }
+    }
+
+    g.position.set(x, 0, z);
+    g.rotation.y = -a + Math.PI; // face table
+    g.name = "chair_"+i;
+    s.root.add(g);
+  }
+}
+
+function createWalkerBot(s){
+  // Procedural bot with animated legs/arms (no GLB needed)
+  const bot = new s.THREE.Group();
+  bot.name = "walker_bot";
+
+  const bodyMat = new s.THREE.MeshStandardMaterial({ color: 0x55aaff, roughness: 0.65, metalness: 0.1 });
+  const limbMat = new s.THREE.MeshStandardMaterial({ color: 0x0b1428, roughness: 0.9, metalness: 0.05 });
+
+  const torso = new s.THREE.Mesh(new s.THREE.CapsuleGeometry(0.18, 0.34, 6, 12), bodyMat);
+  torso.position.set(0, 0.95, 0);
+  bot.add(torso);
+
+  const head = new s.THREE.Mesh(new s.THREE.SphereGeometry(0.14, 18, 18), bodyMat);
+  head.position.set(0, 1.28, 0.03);
+  bot.add(head);
+
+  function limb(){
+    const g = new s.THREE.Group();
+    const upper = new s.THREE.Mesh(new s.THREE.CapsuleGeometry(0.06, 0.22, 4, 10), limbMat);
+    upper.position.set(0, 0.18, 0);
+    g.add(upper);
+    return g;
+  }
+
+  const legL = limb(); legL.position.set(-0.10, 0.46, 0.02);
+  const legR = limb(); legR.position.set( 0.10, 0.46, 0.02);
+  bot.add(legL); bot.add(legR);
+
+  const armL = limb(); armL.position.set(-0.26, 1.05, 0.0);
+  const armR = limb(); armR.position.set( 0.26, 1.05, 0.0);
+  bot.add(armL); bot.add(armR);
+
+  bot.userData = {
+    legL, legR, armL, armR,
+    radius: 6.3,
+    speed: 1.1,
+    phase: 0,
+    angle: 0,
+    lastPos: new s.THREE.Vector3()
+  };
+
+  // start position
+  bot.position.set(6.3, 0, 0);
+  bot.userData.lastPos.copy(bot.position);
+  s.root.add(bot);
+  return bot;
+}
+
+function updateWalkerBot(s, dt, t){
+  const bot = s._walker;
+  if(!bot) return;
+  const u = bot.userData;
+  // Walk in a circle around the table
+  u.angle += dt * (u.speed / u.radius);
+  const tx = Math.cos(u.angle) * u.radius;
+  const tz = Math.sin(u.angle) * u.radius;
+
+  // Compute movement
+  const prev = u.lastPos;
+  const next = new s.THREE.Vector3(tx, 0, tz);
+  const vel = next.clone().sub(prev);
+  const dist = vel.length();
+  bot.position.copy(next);
+  u.lastPos.copy(next);
+
+  // Face direction of travel
+  if(dist > 1e-4){
+    const dir = vel.normalize();
+    bot.rotation.y = Math.atan2(dir.x, dir.z);
+  }
+
+  // Stride phase based on distance traveled (prevents “sliding”)
+  u.phase += dist * 7.0;
+  const swing = Math.sin(u.phase) * 0.7;
+  const swing2 = Math.sin(u.phase + Math.PI) * 0.7;
+
+  u.legL.rotation.x = swing;
+  u.legR.rotation.x = swing2;
+  u.armL.rotation.x = swing2 * 0.8;
+  u.armR.rotation.x = swing * 0.8;
+
+  // Tiny up-down bob while walking
+  bot.position.y = 0.02 + Math.abs(Math.sin(u.phase)) * 0.03;
+}
