@@ -59,6 +59,33 @@ const player = new THREE.Group();
 player.add(camera);
 scene.add(player);
 
+
+// --- GUARANTEED VISUALS (pre-world) ---
+renderer.setClearColor(0x000000, 1);
+const __ambient = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(__ambient);
+const __dir = new THREE.DirectionalLight(0xffffff, 0.85);
+__dir.position.set(5, 10, 7);
+scene.add(__dir);
+
+// Big visible floor so you never black-screen
+const __floorGeo = new THREE.PlaneGeometry(200, 200);
+const __floorMat = new THREE.MeshStandardMaterial({ color: 0x101820, roughness: 1.0, metalness: 0.0 });
+const __floor = new THREE.Mesh(__floorGeo, __floorMat);
+__floor.rotation.x = -Math.PI / 2;
+__floor.position.y = 0;
+__floor.receiveShadow = false;
+scene.add(__floor);
+
+// A small "origin beacon"
+const __beacon = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.4 }));
+__beacon.position.set(0, 1.2, 0);
+scene.add(__beacon);
+
+// Ensure a standing default pose
+player.position.set(0, 0, 8);
+camera.position.set(0, 1.65, 0);
+
 player.position.set(0, 0, 6);
 camera.position.set(0, 1.65, 0);
 
@@ -69,7 +96,20 @@ window.addEventListener("resize", () => {
 });
 
 const controls = new AndroidControls({ player, camera, dom: renderer.domElement, log });
-const world = await World.init({ THREE, scene, renderer, camera, player, controls, log });
+let world = null;
+  try{
+    // World init can stall on mobile if a module import or asset fetch hangs.
+    // We time out and keep the sandbox usable (floor + controls) instead of black-screening.
+    world = await Promise.race([
+      World.init({ THREE, scene, renderer, camera, player, controls, log }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("World init timeout (8s)")), 8000))
+    ]);
+    log("World init OK.");
+  }catch(err){
+    log(`WORLD INIT ERROR: ${err?.message || err}`);
+    log("Running SAFE MODE: visuals + controls only. You can still load avatars and use modules.");
+    world = { update(){} };
+  }
 
 let modules = [];
 async function reloadModules(){
