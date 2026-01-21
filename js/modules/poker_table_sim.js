@@ -1,5 +1,3 @@
-import * as THREE from "three";
-
 function makeDeck(){
   const suits = ["♠","♥","♦","♣"];
   const ranks = ["A","K","Q","J","10","9","8","7","6","5","4","3","2"];
@@ -75,6 +73,7 @@ function makeSeatedBot(color=0x55aaff){
 
 export async function init(ctx){
   const { scene, player, log } = ctx;
+  const THREE = ctx.THREE;
 
   const root = new THREE.Group();
   root.name = "poker_table_sim_root";
