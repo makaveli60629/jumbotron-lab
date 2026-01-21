@@ -1,8 +1,8 @@
 // Module registry: add/remove modules here without touching engine.
 // Any module must export: init(ctx) -> { update(dt,t)?, dispose()? }
 export const MODULES = [
-  { name: "module_sandbox_ui", enabled: true,  path: "./js/modules/module_sandbox_ui.js" },
-  { name: "poker_table_sim",  enabled: true,  path: "./js/modules/poker_table_sim.js" }
+  { name: "module_sandbox_ui", enabled: true,  path: "./modules/module_sandbox_ui.js" },
+  { name: "poker_table_sim",  enabled: true,  path: "./modules/poker_table_sim.js" }
 ];
 
 export async function loadEnabledModules(ctx){
