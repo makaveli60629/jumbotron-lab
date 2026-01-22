@@ -1,52 +1,76 @@
-AFRAME.registerComponent('diagnostics-overlay', {
-  init: function () {
-    this.diag = document.getElementById('diag');
-    this.rig = document.getElementById('rig');
-    this._fpsAcc = 0; this._fpsN = 0; this._fps = 0;
-    if (this.diag) this.diag.textContent = 'READY…';
-  },
-  tick: function (t, dt) {
-    if (!this.diag || !dt) return;
-    const fps = 1000 / dt;
-    this._fpsAcc += fps; this._fpsN++;
-    if (this._fpsN >= 12) { this._fps = this._fpsAcc / this._fpsN; this._fpsAcc=0; this._fpsN=0; }
-
-    const scene = this.el.sceneEl;
-    const mode = scene.is('vr-mode') ? 'VR' : 'FLAT';
-    const joy = window.__JOY_STATE__ || {x:0,y:0,active:false};
-    const pos = this.rig ? this.rig.object3D.position : {x:0,z:0};
-
-    const hasJoy = !!AFRAME.components['android-joystick-move'];
-    const hasCol = !!AFRAME.components['world-collisions'];
-    const hasBotW = !!AFRAME.components['bot-walker'];
-    const hasBotS = !!AFRAME.components['bot-seated'];
-
-    const animDb = window.__ANIM_DIAG__ || {};
-    const lines = [];
-    for (const k of Object.keys(animDb)) {
-      const a = animDb[k];
-      lines.push(`${k}: animationsRemoved=${a.removed} clips=${a.clipCount} (static)`);
-      if (a.names && a.names.length) {
-        const short = a.names.slice(0, 10).join(', ') + (a.names.length > 10 ? ' …' : '');
-        lines.push(`   clips: ${short}`);
-      }
-    }
-    const animText = lines.length ? lines.join('\n') : '(waiting for model-loaded)';
-
-    this.diag.textContent =
-`Scarlett Lobby v3.2 (NO-ANIM TEST)
-FPS: ${this._fps.toFixed(1)}   Mode: ${mode}
-Rig: x=${pos.x.toFixed(2)} z=${pos.z.toFixed(2)}
-Joy: x=${joy.x.toFixed(2)} y=${joy.y.toFixed(2)} ${joy.active ? '(touch)' : ''}
-VR Buttons: grab=${!!window.__BTN_GRAB__} wave=${!!window.__BTN_WAVE__}
-
-Modules:
-- android-joystick-move: ${hasJoy ? 'OK' : 'MISSING'}
-- world-collisions:     ${hasCol ? 'OK' : 'MISSING'}
-- bot-walker:           ${hasBotW ? 'OK' : 'MISSING'}
-- bot-seated:           ${hasBotS ? 'OK' : 'MISSING'}
-
-Avatars (static):
-${animText}`;
+export class Diagnostics {
+  constructor({el, statusEl}){
+    this.el = el;
+    this.statusEl = statusEl;
+    this.visible = false;
+    this.lines = [];
+    this.stats = {
+      startedAt: performance.now(),
+      fps: 0,
+      frames: 0,
+      lastFpsAt: performance.now(),
+      xr: 'unknown',
+      session: 'none',
+      controllers: 0,
+      movement: 'unknown',
+      room: 'lobby',
+      loaded: [],
+      errors: []
+    };
   }
-});
+  setVisible(v){
+    this.visible = v;
+    this.el.style.display = v ? 'block' : 'none';
+  }
+  toggle(){ this.setVisible(!this.visible); }
+  log(line){
+    this.lines.push(String(line));
+    if (this.lines.length > 80) this.lines.shift();
+  }
+  error(err){
+    const msg = (err && err.message) ? err.message : String(err);
+    this.stats.errors.push(msg);
+    if (this.stats.errors.length > 12) this.stats.errors.shift();
+    this.log('ERROR: ' + msg);
+  }
+  setStatus(text){
+    this.statusEl.textContent = text;
+  }
+  setRoom(room){ this.stats.room = room; }
+  setMovement(m){ this.stats.movement = m; }
+  setXR({supported, inSession, controllers}){
+    this.stats.xr = supported ? 'supported' : 'not supported';
+    this.stats.session = inSession ? 'active' : 'none';
+    this.stats.controllers = controllers || 0;
+  }
+  setLoaded(list){ this.stats.loaded = list.slice(0, 20); }
+
+  tick(){
+    this.stats.frames++;
+    const now = performance.now();
+    if (now - this.stats.lastFpsAt >= 500){
+      const dt = now - this.stats.lastFpsAt;
+      this.stats.fps = Math.round((this.stats.frames / dt) * 1000);
+      this.stats.frames = 0;
+      this.stats.lastFpsAt = now;
+    }
+    if (!this.visible) return;
+
+    const up = Math.round((now - this.stats.startedAt)/1000);
+    const hdr = [
+      'TEST SERVER DIAGNOSTICS',
+      '----------------------',
+      `Uptime: ${up}s`,
+      `FPS: ${this.stats.fps}`,
+      `XR: ${this.stats.xr} | Session: ${this.stats.session} | Controllers: ${this.stats.controllers}`,
+      `Room: ${this.stats.room}`,
+      `Movement: ${this.stats.movement}`,
+      `Loaded: ${this.stats.loaded.join(', ') || '(none)'}`,
+      this.stats.errors.length ? ('Errors: ' + this.stats.errors.join(' | ')) : 'Errors: (none)',
+      '',
+      'Log:',
+      ...this.lines.slice(-18)
+    ];
+    this.el.textContent = hdr.join('\n');
+  }
+}
