@@ -2,115 +2,104 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>SCARLETT AVATAR LAB — Permanent Spine</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SCARLETT VR Poker — Update 3.0</title>
+  <meta name="color-scheme" content="dark light" />
   <style>
-    :root{ --hudScale:1; }
-    html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;font-family:monospace;}
-    #app{position:fixed;inset:0;z-index:1;}
-    #hud{
-      position:fixed;top:10px;left:10px;z-index:9999;
-      background:rgba(10,16,32,.88);
-      border:1px solid #00ffff;border-radius:14px;
-      color:#7ff; width:min(360px, 92vw);
-      transform:scale(var(--hudScale)); transform-origin:top left;
-      box-shadow:0 0 30px rgba(0,255,255,.12);
+    html, body { margin:0; padding:0; height:100%; background:#0b0f14; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #hud { position:fixed; left:0; top:0; right:0; z-index:9999; pointer-events:none; padding:10px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn { pointer-events:auto; border:1px solid rgba(255,255,255,.14); background:rgba(10,14,20,.65); color:#fff; padding:10px 12px; border-radius:12px; font-size:14px; }
+    .btn:active { transform: translateY(1px); }
+    #diagPanel { pointer-events:auto; margin-top:10px; padding:10px; border-radius:14px; border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.55); max-width: 980px; display:none; }
+    #diagPanel pre { margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.35; }
+    #loader {
+      position:fixed; inset:0; z-index:9998; display:flex; align-items:center; justify-content:center;
+      background: radial-gradient(1200px 800px at 50% 40%, rgba(30,40,60,.55), rgba(0,0,0,.82));
+      color:#fff;
     }
-    #hud header{padding:12px 12px 0 12px;}
-    #hud h1{margin:0;font-size:14px;letter-spacing:1px;}
-    #hud .sub{margin-top:6px;color:#9ff;font-size:11px;opacity:.85}
-    #hud .row{display:flex;gap:8px;padding:10px 12px 0 12px;flex-wrap:wrap}
-    button,.btn{
-      appearance:none;border:1px solid rgba(0,255,255,.35);
-      background:rgba(0,255,255,.12);color:#bff;
-      padding:9px 10px;border-radius:10px;
-      font-weight:700;cursor:pointer;
-      flex:1 1 auto; min-width:110px;
-    }
-    button.primary{background:#00ffff;color:#001018;border-color:#00ffff}
-    button.danger{background:#ff4455;color:#1b0003;border-color:#ff4455}
-    button.small{padding:7px 9px;font-size:11px;min-width:80px}
-    input{
-      width:100%; box-sizing:border-box;
-      padding:10px;border-radius:10px;
-      background:#07101e;border:1px solid rgba(0,255,255,.25);
-      color:#bff; outline:none;
-    }
-    #hudBody{padding:10px 12px 12px 12px; max-height:72vh; overflow:auto;}
-    .label{font-size:11px;color:#9ff;opacity:.9;margin:10px 0 6px}
-    .quick button{width:100%; margin-top:8px; font-weight:700}
-    #hudlog{
-      height:140px; overflow:auto; padding:8px;
-      background:#000;border:1px solid rgba(0,255,255,.22);
-      border-radius:10px;color:#00ff7a;font-size:10px;white-space:pre-wrap;
-    }
-    #toast{
-      position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
-      background:rgba(0,0,0,.8);color:#fff;padding:10px 14px;border-radius:999px;
-      border:1px solid rgba(255,255,255,.15);z-index:10000;display:none;
-      max-width:92vw;text-align:center;font-size:12px;
-    }
-    #xrBanner{
-      position:fixed;left:50%;bottom:64px;transform:translateX(-50%);
-      background:rgba(0,0,0,.6);color:#fff;padding:8px 12px;border-radius:10px;
-      border:1px solid rgba(255,255,255,.12);z-index:3;font-size:12px;
-    }
-    #joyWrap{
-      position:fixed;left:0;bottom:0;width:50vw;height:50vh;
-      z-index:4;pointer-events:none;
-    }
-    /* allow taps on HUD; allow joystick to receive touch */
-    #hud{pointer-events:auto}
-    #joyWrap{pointer-events:none}
+    #loaderCard { border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.45); padding:16px 18px; border-radius:16px; width:min(560px, 92vw); }
+    #loaderTitle { font-weight:700; font-size:16px; margin-bottom:6px; }
+    #loaderSub { opacity:.85; font-size:13px; }
+    #loaderErr { margin-top:10px; color:#ffb4b4; font-size:12px; display:none; }
+    #hint { opacity:.8; margin-top:10px; font-size:12px; }
+
+    /* Android pads */
+    #androidPads{ position:fixed; inset:0; z-index:9997; pointer-events:none; display:none; }
+    .pad{ position:absolute; width:160px; height:160px; border-radius:999px; border:1px solid rgba(255,255,255,.18);
+          background:rgba(10,14,20,.25); backdrop-filter: blur(6px); pointer-events:auto; touch-action:none; }
+    .knob{ position:absolute; left:50%; top:50%; width:70px; height:70px; margin-left:-35px; margin-top:-35px;
+           border-radius:999px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); }
+    #padMove{ left:18px; bottom:18px; }
+    #padTurn{ right:18px; bottom:18px; }
+
+    /* Make sure VR button / native overlays aren’t blocked */
+    #hud[aria-hidden="true"]{ display:none; }
   </style>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script type="module" src="./js/app.js?v=update3_0"></script>
 </head>
 <body>
-  <div id="app"></div>
-
-  <div id="hud">
-    <header>
-      <h1>SCARLETT AVATAR LAB — PERMANENT SPINE <span id="status" style="float:right;opacity:.85">BOOTING…</span></h1>
-      <div class="sub">Desktop: WASD + Mouse drag • Android: Touch Joystick • Quest: Enter VR (HUD auto-hides)</div>
-    </header>
-
+  <div id="hud" aria-hidden="false">
     <div class="row">
-      <button id="btnCompact" class="small">COMPACT</button>
-      <button id="btnCopyLog" class="small">COPY LOG</button>
-      <button id="btnDownloadLog" class="small">DOWNLOAD</button>
-      <button id="btnHudSize" class="small">HUD SIZE</button>
+      <button id="btnEnterVR" class="btn" type="button">Enter VR</button>
+      <button id="btnTeleport" class="btn" type="button">Teleport: ON</button>
+      <button id="btnReset" class="btn" type="button">Reset to Spawn</button>
+      <button id="btnAudit" class="btn" type="button">Audit Modules</button>
+      <button id="btnDiag" class="btn" type="button">Diagnostics</button>
+      <button id="btnHideHUD" class="btn" type="button">Hide HUD</button>
     </div>
 
-    <div class="row">
-      <button id="btnHide" class="primary">PLAY (HIDE HUD)</button>
-      <button id="btnShow" class="danger">SHOW HUD</button>
-      <button id="btnReload">RELOAD MODULES</button>
-    </div>
-
-    <div id="hudBody">
-      <div class="label">AVATAR QUICK LOAD</div>
-      <input id="avatarUrl" placeholder="GLB/GLTF URL or path (e.g. assets/avatar.glb)" autocomplete="off" />
-      <div class="row" style="padding:8px 0 0 0">
-        <button id="btnLoadAvatar" class="primary">LOAD AVATAR</button>
-        <button id="btnClearAvatar">CLEAR</button>
-      </div>
-
-      <div class="quick">
-        <button data-path="assets/free_pack_male_base_mesh.glb">free_pack_male_base_mesh.glb</button>
-        <button data-path="assets/models/male_mesh.glb">models/male_mesh.glb</button>
-        <button data-path="assets/models/combat_ninja_inspired_by_jin_roh_wolf_brigade.glb">models/combat_ninja_jin_roh.glb</button>
-        <div class="sub" style="margin-top:8px;opacity:.8">
-          Tip: These are just file paths. Make sure the GLBs exist in your repo at those locations.
-        </div>
-      </div>
-
-      <div class="label">LOG</div>
-      <div id="hudlog">INITIALIZING…</div>
+    <div id="diagPanel">
+      <pre id="diagText">booting…</pre>
     </div>
   </div>
 
-  <div id="xrBanner">WEBXR NOT AVAILABLE (normal on Android Chrome). Use Quest Browser for VR.</div>
-  <div id="toast"></div>
+  <div id="loader">
+    <div id="loaderCard">
+      <div id="loaderTitle">loader active</div>
+      <div id="loaderSub">SCARLETT Update 3.0 — starting world…</div>
+      <div id="loaderErr"></div>
+      <div id="hint">Tip: teleport shows a floor reticle when your laser hits something teleportable.</div>
+    </div>
+  </div>
 
-  <script type="module" src="./boot.mjs"></script>
+  <div id="androidPads" aria-hidden="true">
+    <div id="padMove" class="pad"><div id="knobMove" class="knob"></div></div>
+    <div id="padTurn" class="pad"><div id="knobTurn" class="knob"></div></div>
+  </div>
+
+  <a-scene id="scene"
+    renderer="antialias:true; physicallyCorrectLights:true; colorManagement:true"
+    background="color: #0b0f14"
+    xr-mode-ui="enabled: false"
+    webxr="requiredFeatures: local-floor; optionalFeatures: bounded-floor, hand-tracking"
+  >
+    <a-assets timeout="15000"></a-assets>
+
+    <a-entity id="rig" position="0 0 3">
+      <a-entity id="head" camera position="0 1.65 0" look-controls="pointerLockEnabled: true; touchEnabled: true"></a-entity>
+
+      <a-entity id="leftHand"
+        laser-controls="hand: left"
+        raycaster="objects: .teleportable; far: 30"
+        teleport-ray="hand: left"
+      ></a-entity>
+
+      <a-entity id="rightHand"
+        laser-controls="hand: right"
+        raycaster="objects: .teleportable; far: 30"
+        teleport-ray="hand: right"
+      ></a-entity>
+
+      <a-entity smooth-locomotion></a-entity>
+    </a-entity>
+
+    <a-entity light="type: ambient; intensity: 0.55; color: #cfe3ff"></a-entity>
+    <a-entity light="type: directional; intensity: 0.9; color: #ffffff" position="2 6 4"></a-entity>
+
+    <a-entity id="diagText3d" position="0 1.55 -1.2" text="value: ; width: 2.6; align:center; color:#d9e6ff;" visible="false"></a-entity>
+  </a-scene>
 </body>
 </html>
