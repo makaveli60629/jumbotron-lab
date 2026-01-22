@@ -7,10 +7,17 @@
 const $ = (id) => document.getElementById(id);
 
 const logEl = $("log");
+window.__scarlettLogs = window.__scarlettLogs || [];
 function log(msg){
   const t = new Date().toLocaleTimeString();
-  logEl.textContent = `${logEl.textContent}\n[${t}] ${msg}`;
-  logEl.scrollTop = logEl.scrollHeight;
+  const line = `[${t}] ${msg}`;
+  window.__scarlettLogs.push(line);
+  if (window.__scarlettLogs.length > 400) window.__scarlettLogs.shift();
+  if (logEl) {
+    logEl.textContent = window.__scarlettLogs.slice(-60).join("\n");
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  console.log(line);
 }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
@@ -179,11 +186,24 @@ async function loadNPC(){
 
 // --- Wear Outfit (best-effort attach) ---
 function findBoneByName(root, names){
+  if(!root) return null;
+  const wanted = (names||[]).map(n => String(n).toLowerCase());
   let found = null;
-  root.traverse((o)=>{
+  root.traverse(o=>{
     if(found) return;
-    const n = (o.name || "").toLowerCase();
-    if(names.some(k => n === k || n.includes(k))) found = o;
+    if(o.isBone){
+      const nm = String(o.name||"").toLowerCase();
+      if(wanted.includes(nm)) found = o;
+    }
+  });
+  if(found) return found;
+  // fallback fuzzy
+  root.traverse(o=>{
+    if(found) return;
+    if(o.isBone){
+      const nm = String(o.name||"").toLowerCase();
+      if(/hip|pelvis/.test(nm)) found = o;
+    }
   });
   return found;
 }
@@ -294,6 +314,7 @@ async function boot(){
     npcEnt.setAttribute("npc-path", "radius: 2.2; speed: 0.00035; height: 0.0");
 
     log("[BOOT] Gallery ready.");
+  setupTouchJoysticks();
   } catch (e){
     console.error(e);
     log(`[BOOT] ERROR: ${e?.message || e}`);
@@ -314,4 +335,91 @@ bind("btnNextOutfit", async ()=>{ idxOutfit++; await loadOutfit(); });
 bind("btnWear", wearOutfit);
 bind("btnReset", resetAll);
 
-boot();
+boot();btnCopyLogs && btnCopyLogs.addEventListener("click", async () => {
+  try{
+    const txt = (window.__scarlettLogs||[]).join("\n");
+    await navigator.clipboard.writeText(txt);
+    log("[COPY] Logs copied to clipboard.");
+  }catch(e){
+    log("[COPY] Failed: " + (e && e.message ? e.message : e));
+  }
+});
+
+
+// --- Android Touch Joysticks (move + look)
+function setupTouchJoysticks(){
+  const joyL = $("joyL");
+  const joyR = $("joyR");
+  const rig = $("rig");
+  const cam = $("camera");
+  if(!joyL || !joyR || !rig || !cam) return;
+
+  const state = {mx:0, my:0, lx:0, ly:0, speed:2.2, look:1.1};
+
+  function bind(el, cb){
+    const knob = el.querySelector(".joy-knob");
+    const radius = 55;
+    let active=false, pid=null, cx=0, cy=0;
+
+    const setKnob=(x,y)=>{ if(knob) knob.style.transform = `translate(${x}px, ${y}px)`; };
+
+    el.addEventListener("pointerdown",(e)=>{
+      active=true; pid=e.pointerId; el.setPointerCapture(pid);
+      const r=el.getBoundingClientRect();
+      cx=r.left+r.width/2; cy=r.top+r.height/2;
+      setKnob(0,0); cb(0,0); e.preventDefault();
+    }, {passive:false});
+
+    el.addEventListener("pointermove",(e)=>{
+      if(!active || e.pointerId!==pid) return;
+      const dx=e.clientX-cx, dy=e.clientY-cy;
+      const d=Math.hypot(dx,dy) || 1;
+      const k = d>radius ? radius/d : 1;
+      const nx = (dx*k)/radius;
+      const ny = (dy*k)/radius;
+      setKnob(nx*radius, ny*radius);
+      cb(nx, ny);
+      e.preventDefault();
+    }, {passive:false});
+
+    const end=(e)=>{
+      if(!active || e.pointerId!==pid) return;
+      active=false; pid=null;
+      setKnob(0,0); cb(0,0); e.preventDefault();
+    };
+    el.addEventListener("pointerup", end, {passive:false});
+    el.addEventListener("pointercancel", end, {passive:false});
+  }
+
+  bind(joyL, (x,y)=>{ state.mx=x; state.my=-y; });
+  bind(joyR, (x,y)=>{ state.lx=x; state.ly=-y; });
+
+  let last=performance.now();
+  function tick(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+
+    // yaw on rig
+    rig.object3D.rotation.y += state.lx * state.look * dt;
+
+    // pitch on camera
+    const p = cam.object3D.rotation.x + state.ly * state.look * dt;
+    cam.object3D.rotation.x = Math.max(-1.2, Math.min(1.2, p));
+
+    // move
+    const mx = state.mx * state.speed * dt;
+    const mz = state.my * state.speed * dt;
+    if(Math.abs(mx)+Math.abs(mz) > 1e-4){
+      const a = rig.object3D.rotation.y;
+      const cos=Math.cos(a), sin=Math.sin(a);
+      const dx = mx*cos + mz*sin;
+      const dz = mz*cos - mx*sin;
+      rig.object3D.position.x += dx;
+      rig.object3D.position.z += dz;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+  log("[TOUCH] Joysticks ready (left=move, right=look).");
+}
+
+
