@@ -35,6 +35,9 @@ const femaleList = uniq([
 const npcList = uniq([
   "assets/avatars/ninja.glb",
   "assets/models/combat_ninja_inspired_by_jin_roh_wolf_brigade.glb",
+  // extra NPCs you may drop into assets/avatars/
+  "assets/avatars/Meshy_Merged_Animations.glb",
+  "assets/avatars/Character_output.glb",
 ]);
 
 const outfitList = uniq([
@@ -49,6 +52,8 @@ let idxOutfit = 0;
 const maleEnt = $("maleDisplay");
 const femaleEnt = $("femaleDisplay");
 const npcEnt = $("npcWalker");
+const npcDisplayEnt = document.getElementById("npcDisplay") || null;
+const btnNextNPC = document.getElementById("btnNextNPC") || null;
 const outfitEnt = $("outfitDisplay");
 
 let femaleModel3D = null;
@@ -107,9 +112,8 @@ function fitModel(ent, model, {targetHeight=1.55, y=0, rotY=0}={}){
 
   // bring feet to y=0 relative
   const box3 = new THREE.Box3().setFromObject(model);
-  const min = new THREE.Vector3();
-  box3.getMin(min);
-  model.position.y -= min.y;
+  // three.js Box3 exposes .min/.max (no getMin)
+  model.position.y -= (box3.min ? box3.min.y : 0);
 
   // apply y offset and rotation
   ent.object3D.position.y = y;
@@ -151,6 +155,16 @@ async function loadNPC(){
 
   // Fit and enable animation-mixer (prefer walk/idle)
   fitModel(npcEnt, model, {targetHeight:1.75, y:0.0, rotY:0});
+
+  // ALSO show the same NPC on a 3rd pedestal (static preview) if the entity exists.
+  // This lets you see: Male pedestal + Female pedestal + NPC pedestal + NPC walking.
+  if (npcDisplayEnt){
+    const dModel = await setGLB(npcDisplayEnt, url);
+    if(dModel){
+      fitModel(npcDisplayEnt, dModel, {targetHeight:1.65, y:0.0, rotY:180});
+      npcDisplayEnt.removeAttribute("animation-mixer");
+    }
+  }
 
   const clip = bestClipName(model);
   if(clip){
@@ -194,13 +208,37 @@ function wearOutfit(){
 
   outfitClone.name = "__scarlett_outfit__";
 
-  // Try to scale outfit near the female scale.
-  // We use the female entity scale as reference.
-  const s = femaleEnt.object3D.scale.x;
-  outfitClone.scale.setScalar(1.0 / Math.max(0.0001, s)); // compensate because target is inside already-scaled entity
+  // --- auto-fit: scale + align outfit to the avatar around hips ---
+  // NOTE: this is still a VISUAL attach (no skinning), but it will look lined-up on both Android + Quest.
+  target.add(outfitClone); // attach first so it shares the same coordinate space
+  target.updateMatrixWorld(true);
 
-  // Position tweak: pants usually need to go down from hips
-  outfitClone.position.set(0, -0.02, 0);
+  const avatarBox = new THREE.Box3().setFromObject(femaleEnt.getObject3D("mesh"));
+  const avatarSize = new THREE.Vector3();
+  avatarBox.getSize(avatarSize);
+  const avatarH = Math.max(0.01, avatarSize.y);
+
+  const outfitBox = new THREE.Box3().setFromObject(outfitClone);
+  const outfitSize = new THREE.Vector3();
+  outfitBox.getSize(outfitSize);
+  const outfitH = Math.max(0.01, outfitSize.y);
+
+  const name = (outfitList[idxOutfit % outfitList.length] || "").toLowerCase();
+  const ratio = name.includes("pants") || name.includes("cargo") ? 0.62 : 0.90;
+  const desiredH = avatarH * ratio;
+  const k = desiredH / outfitH;
+
+  outfitClone.scale.multiplyScalar(k);
+  outfitClone.updateMatrixWorld(true);
+
+  // center X/Z and put top at y=0 (hips pivot), then nudge down a touch for pants
+  const box2 = new THREE.Box3().setFromObject(outfitClone);
+  const center = new THREE.Vector3();
+  box2.getCenter(center);
+  const downNudge = avatarH * (name.includes("pants") || name.includes("cargo") ? 0.03 : 0.01);
+  outfitClone.position.x -= center.x;
+  outfitClone.position.z -= center.z;
+  outfitClone.position.y -= (box2.max.y + downNudge);
 
   // Ensure render on mobile
   outfitClone.traverse((o)=>{
@@ -211,7 +249,7 @@ function wearOutfit(){
     }
   });
 
-  target.add(outfitClone);
+  // (already added above)
   log(`[WEAR] Attached outfit to ${hips ? "hips bone" : "avatar root"} (visual attach, not true skinning).`);
   log(`[WEAR] If you want REAL binding (pants deform with legs), the pants GLB must be rigged/skinned to the same skeleton as the female avatar.`);
 }
@@ -271,6 +309,7 @@ function bind(id, fn){
 
 bind("btnNextMale", async ()=>{ idxMale++; await loadMale(); });
 bind("btnNextFemale", async ()=>{ idxFemale++; await loadFemale(); });
+bind("btnNextNPC", async ()=>{ idxNPC++; await loadNPC(); });
 bind("btnNextOutfit", async ()=>{ idxOutfit++; await loadOutfit(); });
 bind("btnWear", wearOutfit);
 bind("btnReset", resetAll);
