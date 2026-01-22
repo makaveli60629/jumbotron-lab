@@ -54,6 +54,7 @@
     <button class="btn" id="btnNextFemale">Next Female</button>
     <button class="btn" id="btnNextOutfit">Next Outfit</button>
     <button class="btn" id="btnWear">Wear Outfit</button>
+    <button class="btn" id="btnNextNPC">Next Walker</button>
     <button class="btn" id="btnReset">Reset</button>
   </div>
   <div id="log">[BOOT] Gallery loading...</div>
@@ -76,12 +77,17 @@
     <a-cylinder id="pedMale" position="-1.3 0.25 -2.8" radius="0.55" height="0.5" material="color:#2a2f3d"></a-cylinder>
     <a-cylinder id="pedFemale" position="1.3 0.25 -2.8" radius="0.55" height="0.5" material="color:#2a2f3d"></a-cylinder>
 
+    <!-- 3rd pedestal: show the currently selected NPC as a static display -->
+    <a-cylinder id="pedNPC" position="0 0.25 -4.0" radius="0.55" height="0.5" material="color:#2a2f3d"></a-cylinder>
+
     <!-- Outfit stand (not counted as an avatar) -->
     <a-cylinder id="pedOutfit" position="0 0.25 -1.6" radius="0.4" height="0.35" material="color:#242a35"></a-cylinder>
 
     <!-- Display Avatars -->
     <a-entity id="maleDisplay" position="-1.3 0.5 -2.8" rotation="0 20 0" shadow="cast:true"></a-entity>
     <a-entity id="femaleDisplay" position="1.3 0.5 -2.8" rotation="0 -20 0" shadow="cast:true"></a-entity>
+
+    <a-entity id="npcDisplay" position="0 0.5 -4.0" rotation="0 180 0" shadow="cast:true"></a-entity>
 
     <!-- Outfit model -->
     <a-entity id="outfitDisplay" position="0 0.55 -1.6" rotation="0 180 0" shadow="cast:true"></a-entity>
