@@ -46,6 +46,13 @@
     }
     a-scene { height: 100%; width: 100%; }
   </style>
+  <style>
+    .touch-joystick{position:fixed;bottom:18px;width:150px;height:150px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(6px);z-index:9999;touch-action:none;}
+    #joyL{left:18px;}
+    #joyR{right:18px;}
+    .joy-knob{position:absolute;left:50%;top:50%;width:62px;height:62px;margin-left:-31px;margin-top:-31px;border-radius:999px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);}
+    @media (pointer:fine){ .touch-joystick{display:none;} }
+  </style>
 </head>
 <body>
 
@@ -56,6 +63,7 @@
     <button class="btn" id="btnWear">Wear Outfit</button>
     <button class="btn" id="btnNextNPC">Next Walker</button>
     <button class="btn" id="btnReset">Reset</button>
+    <button class="btn" id="btnCopyLogs">Copy Logs</button>
   </div>
   <div id="log">[BOOT] Gallery loading...</div>
   <div id="vrHint">VR</div>
@@ -93,10 +101,11 @@
     <a-entity id="outfitDisplay" position="0 0.55 -1.6" rotation="0 180 0" shadow="cast:true"></a-entity>
 
     <!-- Walking NPC (3rd avatar) -->
-    <a-entity id="npcWalker" position="0 0 -5" rotation="0 0 0" shadow="cast:true"></a-entity>
+    <a-entity id="npcWalker" position="0 0 -6.2" rotation="0 0 0" shadow="cast:true"></a-entity>
+    <a-entity id="npcDisplay" position="1.8 0 -4"></a-entity>
 
     <!-- Camera rig -->
-    <a-entity id="rig" position="0 1.6 0" movement-controls="speed:0.12">
+    <a-entity id="rig" position="0 1.6 0.6" movement-controls="speed:0.12">
       <a-camera wasd-controls="enabled:false" look-controls="pointerLockEnabled:false"></a-camera>
       <a-entity laser-controls="hand: left"></a-entity>
       <a-entity laser-controls="hand: right"></a-entity>
@@ -105,5 +114,8 @@
   </a-scene>
 
   <script type="module" src="js/gallery.js"></script>
+
+  <div id="joyL" class="touch-joystick" aria-label="Move joystick"><div class="joy-knob"></div></div>
+  <div id="joyR" class="touch-joystick" aria-label="Look joystick"><div class="joy-knob"></div></div>
 </body>
 </html>
