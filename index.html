@@ -1,94 +1,21 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Test Server Lobby v1 (Android + Quest)</title>
-  <style>
-    html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
-    #hud{
-      position:fixed;left:0;top:0;right:0;z-index:10;
-      display:flex;gap:8px;align-items:center;justify-content:flex-start;
-      padding:10px 10px 6px 10px;pointer-events:none;
-      font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; color:#fff;
-      text-shadow:0 1px 2px rgba(0,0,0,.7);
-    }
-    .chip{
-      pointer-events:auto;
-      background:rgba(0,0,0,.55);
-      border:1px solid rgba(255,255,255,.15);
-      border-radius:12px;
-      padding:8px 10px;
-      backdrop-filter: blur(8px);
-      display:flex;gap:8px;align-items:center;
-    }
-    .btn{
-      pointer-events:auto;
-      border:0;border-radius:10px;
-      padding:8px 10px;
-      background:rgba(255,255,255,.12);
-      color:#fff;font-weight:700;
-    }
-    .btn:active{transform:scale(.98)}
-    #diag{
-      position:fixed;left:10px;bottom:10px;z-index:11;
-      width:min(520px, calc(100vw - 20px));
-      max-height:42vh; overflow:auto;
-      background:rgba(0,0,0,.6);
-      border:1px solid rgba(255,255,255,.18);
-      border-radius:14px;
-      padding:10px 12px;
-      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      color:#aef;
-      display:none;
-      white-space:pre-wrap;
-    }
-    #touchControls{
-      position:fixed;left:0;top:0;right:0;bottom:0;z-index:12;
-      pointer-events:none;
-      display:none;
-    }
-    .stick{
-      position:absolute; bottom:18px;
-      width:160px;height:160px;border-radius:999px;
-      background:rgba(255,255,255,.07);
-      border:1px solid rgba(255,255,255,.12);
-      pointer-events:auto;
-      touch-action:none;
-    }
-    .stick .knob{
-      position:absolute;left:50%;top:50%;
-      width:70px;height:70px;border-radius:999px;
-      transform:translate(-50%,-50%);
-      background:rgba(255,255,255,.14);
-      border:1px solid rgba(255,255,255,.18);
-    }
-    #stickMove{left:16px;}
-    #stickLook{right:16px;}
-    #vrButtonHost{
-      position:fixed; right:10px; top:10px; z-index:9999;
-      pointer-events:auto;
-    }
-  </style>
+<meta charset="utf-8">
+<title>Dev Safe Boot</title>
+<script type="module" src="./boot_safe.js"></script>
+<style>
+body{margin:0;background:#000;color:#0f0;font-family:sans-serif}
+#ui{position:fixed;top:10px;left:10px;z-index:10}
+button{margin:4px;padding:10px;border-radius:10px}
+</style>
 </head>
 <body>
-  <div id="hud">
-    <div class="chip">
-      <button class="btn" id="btnLobby">Lobby</button>
-      <button class="btn" id="btnGallery">Gallery</button>
-      <button class="btn" id="btnDiag">Diagnostics</button>
-    </div>
-    <div class="chip" id="statusChip">Booting…</div>
-  </div>
-
-  <div id="vrButtonHost"></div>
-  <div id="diag"></div>
-
-  <div id="touchControls">
-    <div class="stick" id="stickMove"><div class="knob"></div></div>
-    <div class="stick" id="stickLook"><div class="knob"></div></div>
-  </div>
-
-  <script type="module" src="./js/main.js"></script>
+<div id="ui">
+<button>Lobby</button>
+<button>Gallery</button>
+<button>Diagnostics</button>
+<span id="status">Booting…</span>
+</div>
 </body>
 </html>
