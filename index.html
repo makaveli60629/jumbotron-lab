@@ -1,21 +1,25 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Dev Safe Boot</title>
-<script type="module" src="./boot_safe.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Dev Server</title>
 <style>
-body{margin:0;background:#000;color:#0f0;font-family:sans-serif}
-#ui{position:fixed;top:10px;left:10px;z-index:10}
-button{margin:4px;padding:10px;border-radius:10px}
+body{margin:0;background:#000;color:#fff;font-family:sans-serif}
+#ui{position:fixed;top:10px;left:10px;z-index:10;display:flex;gap:8px}
+button{padding:8px 14px;border-radius:12px;border:0;background:#222;color:#fff}
+#log{position:fixed;bottom:0;left:0;right:0;max-height:40%;overflow:auto;background:#111;font-size:12px}
+canvas{display:block}
 </style>
 </head>
 <body>
 <div id="ui">
-<button>Lobby</button>
-<button>Gallery</button>
-<button>Diagnostics</button>
-<span id="status">Booting…</span>
+<button onclick="enterLobby()">Lobby</button>
+<button onclick="enterGallery()">Gallery</button>
+<button onclick="toggleDiag()">Diagnostics</button>
+<span id="boot">Booting…</span>
 </div>
+<div id="log"></div>
+<script type="module" src="./js/boot.js"></script>
 </body>
 </html>
