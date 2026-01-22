@@ -1,9 +1,10 @@
-/* Scarlett VR Poker — Update 3.0 (A-Frame)
-   - Fixes Android movement (pads)
+/* Scarlett VR Poker — Update 3.0 (A-Frame) + PATCH: Avatar Gallery Pedestals
+   - Android movement pads
    - Teleport reticle + teleport
    - Solid table collision (simple radius)
    - Bots: 1 walker (no fighting), 1 seated
    - Diagnostics panel + 3D diag text toggle
+   - PATCH: Named avatar gallery + cycle + outfit try-on pedestal
 */
 const $ = (sel)=>document.querySelector(sel);
 
@@ -22,6 +23,12 @@ const btnAudit = $("#btnAudit");
 const btnDiag = $("#btnDiag");
 const btnHideHUD = $("#btnHideHUD");
 
+// PATCH buttons (safe if missing)
+const btnNextMale = $("#btnNextMale");
+const btnNextFemale = $("#btnNextFemale");
+const btnNextOutfit = $("#btnNextOutfit");
+const btnWear = $("#btnWear");
+
 const androidPads = $("#androidPads");
 const padMove = $("#padMove");
 const padTurn = $("#padTurn");
@@ -34,7 +41,7 @@ const rig = $("#rig");
 const BOOT_LOG = [];
 function log(line){
   BOOT_LOG.push(line);
-  if (diagText) diagText.textContent = BOOT_LOG.slice(-180).join("\n");
+  if (diagText) diagText.textContent = BOOT_LOG.slice(-220).join("\n");
   try{ console.log(line); }catch(_){}
 }
 function showError(msg){
@@ -49,6 +56,160 @@ function hideLoader(){ if (loader) loader.style.display = "none"; }
 function isTouchDevice(){
   return matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
 }
+
+// ===================== AVATAR GALLERY (Pedestals + Names + Outfit Try-On) =====================
+const GALLERY = {
+  male: [
+    { name: "Male Base (Free Pack)", url: "assets/models/free_pack_male_base_mesh.glb", scale: 1.0 },
+    { name: "Male Mesh",             url: "assets/models/male_mesh.glb",               scale: 1.0 },
+    { name: "Male Body (Meshy)",     url: "assets/models/base_male_body_meshy.glb",   scale: 1.0 },
+    { name: "Combat Ninja (Jin-Roh)",url: "assets/models/combat_ninja_inspired_by_jin_roh_wolf_brigade.glb", scale: 1.0 },
+  ],
+  female: [
+    { name: "Female Base (Free Pack)", url: "assets/free_pack_female_base_mesh.glb", scale: 1.0 },
+    { name: "Female (Character Output)", url: "assets/avatars/Character_output.glb", scale: 1.0 },
+  ],
+  outfits: [
+    { name: "Cargo Pants (Futuristic Apocalypse)", url: "assets/clothes/futuristic_apocalypse_female_cargo_pants.glb", scale: 1.0 },
+  ],
+  idxMale: 0,
+  idxFemale: 0,
+  idxOutfit: 0,
+  pedMale: null,
+  pedFemale: null,
+  femaleOutfitHolder: null,
+  lblOutfit: null,
+};
+
+function makePedestal(x, z, titleText) {
+  const ped = document.createElement("a-entity");
+  ped.setAttribute("position", `${x} 0 ${z}`);
+
+  const base = document.createElement("a-entity");
+  base.setAttribute("geometry", "primitive: cylinder; radius: 0.8; height: 0.25; segmentsRadial: 32");
+  base.setAttribute("material", "color:#0b0f14; roughness:1; metalness:0");
+  base.setAttribute("position", "0 0.125 0");
+  ped.appendChild(base);
+
+  const glow = document.createElement("a-entity");
+  glow.setAttribute("geometry", "primitive: ring; radiusInner: 0.65; radiusOuter: 0.78");
+  glow.setAttribute("material", "color:#33fff6; opacity:0.18; transparent:true");
+  glow.setAttribute("rotation", "-90 0 0");
+  glow.setAttribute("position", "0 0.255 0");
+  ped.appendChild(glow);
+
+  const label = document.createElement("a-entity");
+  label.setAttribute("text", `value:${titleText}; width:3.2; align:center; color:#d9e6ff`);
+  label.setAttribute("position", "0 2.25 0");
+  ped.appendChild(label);
+
+  const nameLabel = document.createElement("a-entity");
+  nameLabel.setAttribute("text", "value:—; width:3.6; align:center; color:#ffffff");
+  nameLabel.setAttribute("position", "0 2.05 0");
+  ped.appendChild(nameLabel);
+
+  const holder = document.createElement("a-entity");
+  holder.setAttribute("position", "0 0.25 0");
+  ped.appendChild(holder);
+
+  return { ped, holder, nameLabel };
+}
+
+function clearChildren(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function addModel(holder, url, scale = 1.0) {
+  const m = document.createElement("a-entity");
+  m.setAttribute("gltf-model", url);
+  m.setAttribute("position", "0 0 0");
+  m.setAttribute("rotation", "0 180 0");
+  m.setAttribute("scale", `${scale} ${scale} ${scale}`);
+  holder.appendChild(m);
+  return m;
+}
+
+function showMale() {
+  const item = GALLERY.male[GALLERY.idxMale];
+  clearChildren(GALLERY.pedMale.holder);
+  addModel(GALLERY.pedMale.holder, item.url, item.scale);
+  GALLERY.pedMale.nameLabel.setAttribute("text", `value:${item.name}; width:3.6; align:center; color:#ffffff`);
+  log(`[GALLERY] Male = ${item.name} (${item.url})`);
+}
+
+function showFemale() {
+  const item = GALLERY.female[GALLERY.idxFemale];
+  clearChildren(GALLERY.pedFemale.holder);
+
+  addModel(GALLERY.pedFemale.holder, item.url, item.scale);
+
+  const outfitHolder = document.createElement("a-entity");
+  outfitHolder.setAttribute("position", "0 0 0");
+  outfitHolder.setAttribute("rotation", "0 180 0");
+  outfitHolder.setAttribute("scale", `${item.scale} ${item.scale} ${item.scale}`);
+  GALLERY.pedFemale.holder.appendChild(outfitHolder);
+
+  GALLERY.femaleOutfitHolder = outfitHolder;
+
+  GALLERY.pedFemale.nameLabel.setAttribute("text", `value:${item.name}; width:3.6; align:center; color:#ffffff`);
+  log(`[GALLERY] Female = ${item.name} (${item.url})`);
+}
+
+function showOutfitNameOnly() {
+  const item = GALLERY.outfits[GALLERY.idxOutfit];
+  if (GALLERY.lblOutfit){
+    GALLERY.lblOutfit.setAttribute("text", `value:Outfit: ${item.name}; width:3.6; align:center; color:#ffffff`);
+  }
+  log(`[GALLERY] Outfit selected = ${item.name} (${item.url})`);
+}
+
+function wearOutfit() {
+  if (!GALLERY.femaleOutfitHolder) {
+    log("[GALLERY] Outfit holder missing (female not loaded yet).");
+    return;
+  }
+  const item = GALLERY.outfits[GALLERY.idxOutfit];
+  clearChildren(GALLERY.femaleOutfitHolder);
+  addModel(GALLERY.femaleOutfitHolder, item.url, item.scale);
+  log(`[GALLERY] Wear Outfit = ${item.name}`);
+}
+
+function bindGalleryButtons() {
+  btnNextMale?.addEventListener("click", ()=>{
+    GALLERY.idxMale = (GALLERY.idxMale + 1) % GALLERY.male.length;
+    showMale();
+  });
+  btnNextFemale?.addEventListener("click", ()=>{
+    GALLERY.idxFemale = (GALLERY.idxFemale + 1) % GALLERY.female.length;
+    showFemale();
+  });
+  btnNextOutfit?.addEventListener("click", ()=>{
+    GALLERY.idxOutfit = (GALLERY.idxOutfit + 1) % GALLERY.outfits.length;
+    showOutfitNameOnly();
+  });
+  btnWear?.addEventListener("click", wearOutfit);
+}
+
+function spawnGalleryPedestals() {
+  // Place behind table so you can walk up
+  const p1 = makePedestal(-3.0, -6.0, "MALE PEDESTAL");
+  const p2 = makePedestal( 0.0, -6.0, "FEMALE PEDESTAL");
+  const p3 = makePedestal( 3.0, -6.0, "OUTFIT SELECT");
+
+  scene.appendChild(p1.ped);
+  scene.appendChild(p2.ped);
+  scene.appendChild(p3.ped);
+
+  GALLERY.pedMale = p1;
+  GALLERY.pedFemale = p2;
+  GALLERY.lblOutfit = p3.nameLabel;
+
+  bindGalleryButtons();
+  showMale();
+  showFemale();
+  showOutfitNameOnly();
+}
+// ===================== END AVATAR GALLERY =====================
 
 // -------------------- Components --------------------
 
@@ -69,7 +230,6 @@ AFRAME.registerComponent("teleport-ray", {
     this.el.addEventListener("triggerdown", this._onTrigger);
     this.el.addEventListener("abuttondown", this._onTrigger);
     this.el.addEventListener("gripdown", this._onTrigger);
-    // desktop fallback: click while aiming
     this.el.addEventListener("mousedown", this._onTrigger);
 
     this.hitPoint = null;
@@ -88,7 +248,6 @@ AFRAME.registerComponent("teleport-ray", {
   _onTrigger(){
     if (!this.enabled) return;
     if (!this.hitPoint) return;
-    // keep Y = 0 for rig, since camera has height
     this.rig.object3D.position.set(this.hitPoint.x, 0, this.hitPoint.z);
   },
   tick(){
@@ -119,9 +278,8 @@ AFRAME.registerComponent("smooth-locomotion", {
     this.rig = document.querySelector("#rig");
     this.head = document.querySelector("#head");
     this.speed = 2.0;
-    this.turnSpeed = 1.8; // radians/sec
+    this.turnSpeed = 1.8;
 
-    // pad vectors
     this.moveVec = {x:0,y:0};
     this.turnVec = {x:0,y:0};
     this.keys = new Set();
@@ -131,9 +289,8 @@ AFRAME.registerComponent("smooth-locomotion", {
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
 
-    // Simple “solid table” push-out (cylinder around center)
     this.tableCenter = new THREE.Vector3(0,0,0);
-    this.tableRadius = 2.75; // matches big table
+    this.tableRadius = 2.75;
     this.playerRadius = 0.28;
 
     this._bindPads();
@@ -177,7 +334,6 @@ AFRAME.registerComponent("smooth-locomotion", {
     bindPad(padTurn, knobTurn, this.turnVec);
   },
   _applyTableCollision(pos){
-    // Keep out of a cylinder around table center (XZ only)
     const dx = pos.x - this.tableCenter.x;
     const dz = pos.z - this.tableCenter.z;
     const dist = Math.hypot(dx, dz);
@@ -191,30 +347,24 @@ AFRAME.registerComponent("smooth-locomotion", {
   tick(t, dtMs){
     const dt = Math.min(dtMs/1000, 0.05);
 
-    // keyboard fallback (desktop)
     let fwd = 0, str = 0;
     if (this.keys.has("KeyW")) fwd += 1;
     if (this.keys.has("KeyS")) fwd -= 1;
     if (this.keys.has("KeyA")) str -= 1;
     if (this.keys.has("KeyD")) str += 1;
 
-    // touch pads
     fwd += -this.moveVec.y;
     str += this.moveVec.x;
 
-    // normalize
     const len = Math.hypot(fwd, str);
     if (len > 1e-6){ fwd/=len; str/=len; }
 
-    // heading from head yaw
     const rig3 = this.rig.object3D;
     const head3 = this.head.object3D;
 
-    // turning: right pad x
     const turn = this.turnVec.x * this.turnSpeed * dt;
     rig3.rotation.y -= turn;
 
-    // movement in head-forward space but grounded
     const forward = new THREE.Vector3(0,0,-1).applyQuaternion(head3.quaternion);
     forward.y = 0; forward.normalize();
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
@@ -224,12 +374,8 @@ AFRAME.registerComponent("smooth-locomotion", {
     pos.addScaledVector(forward, fwd * step);
     pos.addScaledVector(right, str * step);
 
-    // ground y
     pos.y = 0;
-
-    // solid table
     this._applyTableCollision(pos);
-
     rig3.position.copy(pos);
   }
 });
@@ -237,7 +383,6 @@ AFRAME.registerComponent("smooth-locomotion", {
 // -------------------- World Build --------------------
 
 function ensureWorld(){
-  // Floor (teleportable)
   const floor = document.createElement("a-entity");
   floor.setAttribute("geometry", "primitive: plane; width: 80; height: 80");
   floor.setAttribute("rotation", "-90 0 0");
@@ -245,7 +390,6 @@ function ensureWorld(){
   floor.classList.add("teleportable");
   scene.appendChild(floor);
 
-  // Grid feel (subtle)
   const grid = document.createElement("a-entity");
   grid.setAttribute("geometry", "primitive: plane; width: 80; height: 80");
   grid.setAttribute("rotation", "-90 0 0");
@@ -253,7 +397,6 @@ function ensureWorld(){
   grid.setAttribute("material", "shader: flat; color: #0b2230; opacity: 0.35; transparent: true; side: double");
   scene.appendChild(grid);
 
-  // Big poker table (solid via locomotion cylinder)
   const table = document.createElement("a-entity");
   table.setAttribute("position", "0 0 0");
 
@@ -269,7 +412,6 @@ function ensureWorld(){
   felt.setAttribute("position", "0 0.55 0");
   table.appendChild(felt);
 
-  // inner ring
   const ring = document.createElement("a-entity");
   ring.setAttribute("geometry", "primitive: torus; radius: 1.9; radiusTubular: 0.22; segmentsRadial: 24; segmentsTubular: 64");
   ring.setAttribute("material", "color: #070809; roughness: 1; metalness: 0");
@@ -279,7 +421,6 @@ function ensureWorld(){
 
   scene.appendChild(table);
 
-  // Chairs + seated bot
   const chairR = 3.35;
   for (let i=0;i<6;i++){
     const ang = (i/6)*Math.PI*2;
@@ -304,7 +445,6 @@ function ensureWorld(){
 
     scene.appendChild(chair);
 
-    // Put seated bot on chair 0
     if (i === 0){
       const botSit = makeBot("#ff8844");
       botSit.setAttribute("position", `${x} 0 ${z}`);
@@ -314,31 +454,30 @@ function ensureWorld(){
     }
   }
 
-  // Walking bot around table (no fighting)
   const botWalk = makeBot("#2aa4ff");
   botWalk.setAttribute("position", "4.2 0 0");
   botWalk.setAttribute("bot-walk", "radius: 4.2; speed: 0.6");
   scene.appendChild(botWalk);
 
-  // Backdrop wall (for contrast)
   const wall = document.createElement("a-entity");
   wall.setAttribute("geometry", "primitive: plane; width: 40; height: 18");
   wall.setAttribute("material", "color: #030506; roughness: 1");
   wall.setAttribute("position", "0 9 -18");
   scene.appendChild(wall);
 
-  // Teleportable spawn marker
   const spawnMarker = document.createElement("a-entity");
   spawnMarker.setAttribute("geometry","primitive: ring; radiusInner:0.18; radiusOuter:0.24");
   spawnMarker.setAttribute("material","color:#33fff6; opacity:0.18; transparent:true");
   spawnMarker.setAttribute("rotation","-90 0 0");
   spawnMarker.setAttribute("position","0 0.01 3");
   scene.appendChild(spawnMarker);
+
+  // PATCH: Avatar Gallery pedestals
+  spawnGalleryPedestals();
 }
 
 function makeBot(color){
   const bot = document.createElement("a-entity");
-  bot.setAttribute("position","0 0 0");
 
   const head = document.createElement("a-entity");
   head.setAttribute("geometry","primitive: sphere; radius: 0.22; segmentsWidth: 24; segmentsHeight:24");
@@ -379,17 +518,12 @@ AFRAME.registerComponent("bot-walk", {
     const x = Math.cos(this.t) * r;
     const z = Math.sin(this.t) * r;
     this.el.object3D.position.set(x, 0, z);
-    // face center
     this.el.object3D.lookAt(0, 1.0, 0);
   }
 });
 
 AFRAME.registerComponent("bot-sit", {
   init(){
-    // lower bot to appear seated
-    const o = this.el.object3D;
-    o.position.y = 0.0;
-    // nudge children down
     this.el.childNodes.forEach((n)=>{
       if (!n.object3D) return;
       n.object3D.position.y -= 0.45;
@@ -408,7 +542,6 @@ function setTeleport(on){
   hands.forEach(h=>{
     const comp = h.components["teleport-ray"];
     if (comp && comp.setEnabled) comp.setEnabled(teleportOn);
-    // also stop raycaster visuals when off
     if (!teleportOn) h.setAttribute("raycaster","objects: .teleportable; far: 0.01");
     else h.setAttribute("raycaster","objects: .teleportable; far: 30");
   });
@@ -417,7 +550,6 @@ function setTeleport(on){
 function toggleDiagnostics(){
   const show = diagPanel.style.display !== "block";
   diagPanel.style.display = show ? "block" : "none";
-  // Optional 3D diag text inside world
   if (diagText3d){
     diagText3d.setAttribute("visible", show ? "true" : "false");
     diagText3d.setAttribute("text", `value: ${BOOT_LOG.slice(-12).join("\\n").replace(/;/g,",")}; width: 2.8; align:center; color:#d9e6ff;`);
@@ -448,7 +580,6 @@ btnEnterVR?.addEventListener("click", async ()=>{
   try{
     if (!scene || !scene.enterVR) throw new Error("scene.enterVR not available yet.");
     await scene.enterVR();
-    // auto-hide HUD so it never blocks VR overlays
     hud.setAttribute("aria-hidden","true");
     log("[XR] EnterVR requested. HUD auto-hidden.");
   }catch(e){
@@ -463,7 +594,6 @@ btnEnterVR?.addEventListener("click", async ()=>{
     log("[BOOT] Starting…");
     log(`[XR] navigator.xr = ${navigator.xr ? "present" : "missing"}`);
 
-    // Wait for scene to be loaded
     setLoaderTitle("loader active");
     await new Promise((resolve, reject)=>{
       const timeout = setTimeout(()=>reject(new Error("Scene load timeout")), 15000);
@@ -475,7 +605,6 @@ btnEnterVR?.addEventListener("click", async ()=>{
 
     ensureWorld();
 
-    // If not XR capable (Android Chrome often), give hint only
     if (!navigator.xr){
       log("[XR] WebXR not available (normal on Android Chrome). Use Quest Browser for VR.");
     }
