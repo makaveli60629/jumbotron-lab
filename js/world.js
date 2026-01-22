@@ -12,6 +12,8 @@ export async function initApp(){
   const statusChip = document.getElementById('statusChip');
   const diagEl = document.getElementById('diag');
   const diag = new Diagnostics({ el: diagEl, statusEl: statusChip });
+  diag.setStatus('JS loaded. Initializing scene...');
+  diag.log('world.js executing');
 
   const btnLobby = document.getElementById('btnLobby');
   const btnGallery = document.getElementById('btnGallery');
@@ -110,13 +112,13 @@ export async function initApp(){
   // Gallery environment (display line + pedestals)
   const displayOrigin = new THREE.Vector3(0, 0, -2.8);
   const faceTarget = new THREE.Vector3(0, 1.6, 0); // face user at origin-ish
-  const displayLine = await buildDisplayLine({
+  buildDisplayLine({
     scene: roomGallery,
     items: manifest.displayLine,
     origin: displayOrigin,
     facingTarget: faceTarget,
     diag
-  });
+  }).catch(e=>{diag.error(e);diag.log('Gallery loaded with fallbacks');});
 
   // Ninja on pedestal in lobby (display)
   const ninjaPed = makePedestal(0.30, 0.20);

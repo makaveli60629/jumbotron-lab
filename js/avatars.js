@@ -6,8 +6,17 @@ import { attachFemaleClothesRuntime } from './clothes_female_runtime.js';
 const loader = new GLTFLoader();
 
 export async function loadGLB(url){
-  return new Promise((resolve, reject)=>{
-    loader.load(url, (gltf)=>resolve(gltf.scene), undefined, (e)=>reject(e));
+  return new Promise((resolve)=>{
+    loader.load(
+      url,
+      (gltf)=>resolve(gltf.scene),
+      undefined,
+      ()=>{
+        console.warn('Missing GLB:', url);
+        const fb = makeFallbackBox(url);
+        resolve(fb);
+      }
+    );
   });
 }
 
